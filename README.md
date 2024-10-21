@@ -30,7 +30,7 @@ The project has started by focusing on fundamental operating system components. 
 2. Navigate to the project directory.
 3. Run the following command:
     ```bash
-      make clean
-      make all
-      make run
+    make clean
+    make all
+    make run
     ```
