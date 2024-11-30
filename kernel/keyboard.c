@@ -1,5 +1,7 @@
 #include "keyboard.h"
 
+// bool keyboard_state[0x59];
+
 bool KeyboardShiftstate = false;
 
 const uint8_t KeyboardKeyscanTable[216] = {
@@ -33,14 +35,15 @@ const uint8_t KeyboardShiftscanTable[(
 };
 
 uint8_t keyboard_scankeycode() {
-    uint8_t current_input, new_input;
-    current_input = port_inb(0x60);
-    while(1) {
-        new_input = port_inb(0x60);
-        if (current_input != new_input) {
-            return new_input;
+    uint8_t current, new;
+    current = port_inb(KEYBOARD_PORT);
+    while (1) {
+        new = port_inb(KEYBOARD_PORT);
+        if (current != new) {
+            return new;
         }
     }
+    return 0;
 }
 
 char keyboard_scankey() {
@@ -69,3 +72,14 @@ char keyboard_scankey() {
     }
     return -1;
 }
+
+// void keyboard_handler() {
+//     printf("Keyboard Interrupt! IRQ: %d.", interrupts_PICGetIRR());
+//     interrupts_PICSendEOI(IRQ_KEYBOARD);
+// }
+
+// void keyboard_init() {
+//     for (int i = 0; i < 0x59; ++i) { keyboard_state[i] = false; }
+//     interrupts_IDTSetGate(PIC1 + IRQ_KEYBOARD, (uint32_t)keyboard_handler);
+//     interrupts_PICIRQEnable(IRQ_KEYBOARD);
+// }
