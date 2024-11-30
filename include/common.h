@@ -1,50 +1,60 @@
-#ifndef COMMON_H
-#define COMMON_H
+#pragma once
 
 #include "types.h"
 #include "port.h"
 #include "display.h"
 #include "keyboard.h"
 
-#define PromptLength 256
+// Define the maximum length of the user input prompt
+#define PROMPT_LENGTH 256
 
-#define MaxStrTokens 127
-#define MaxIntDigits 10
+// Maximum tokens and digits constants for string manipulation
+#define MAX_STR_TOKENS 127
+#define MAX_INT_DIGITS 10
 
-#define va_list __builtin_va_list
-#define va_start(ap, last) __builtin_va_start(ap, last)
-#define va_arg(ap, type) __builtin_va_arg(ap, type)
-#define va_end(ap) __builtin_va_end(ap)
+// Define macros for variable argument list handling
+#define va_list __builtin_va_list                           // Type definition for variable argument list
+#define va_start(ap, last) __builtin_va_start(ap, last)     // Initialize variable argument list
+#define va_arg(ap, type) __builtin_va_arg(ap, type)         // Retrieve the next argument of a specified type
+#define va_end(ap) __builtin_va_end(ap)                     // Clean up the variable argument list
 
-int setCursorLocation(int point);
-int setCursorVisibility(bool toggle);
-int getCursorLocation();
+// Function for update the cursor
+int updateCursor();
 
-int getStrTokenCount();
-int getIntDigitCount();
+// Functions for get string and digit counter values
+int getStrTokenCount();     // Get string tokens
+int getIntDigitCount();     // Get integer digits
 
+// Function to introduce a delay (based on CPU speed)
+void delay(uint32_t count);
+
+// Function for scroll down the CLI Display
 int scrolldown(int times);
 
+// Function for check if a character is a digit (returns true if the character is a number)
 bool isdigit(char chr);
-char** split(char* str);
-int* splitdigits(int num);
 
-void* memset(void* ptr, char value, size_t num);
-void* memcpy(void* dest, const void* src, size_t num);
+// Functions for split strings and integers
+char** split(char* str);    // String splitter
+int* splitdigits(int num);  // Integer splitter
 
-char* strreset(char* str);
-int strlen(char* str);
-char* strcpy(char* dest, const char* src);
-int strcmp(const char* str1, const char* str2);
-int snprintf(char* buffer, size_t size, char* format, ...);
+// Functions for memory manipulation
+void* memset(void* ptr, char value, size_t num);        // Fill a block of memory with specific value
+void* memcpy(void* dest, const void* src, size_t num);  // Copy a block of memory from source to destination
 
-int atoi(const char* str);
-char* itoa(int num);
-char* xtoa(uint32_t num);
+// Functions for string manipulation
+int strlen(char* str);                                      // Get the length of specific string
+char* strcpy(char* dest, const char* src);                  // Copy a string to another one
+int strcmp(const char* str1, const char* str2);             // Compare two strings
+int snprintf(char* buffer, size_t size, char* format, ...); // Format and write output to a string
 
-void putchar(char chr);
-void puts(char* str);
-void printf(char* format, ...);
-char* scanf(char* header);
+// Functions for string-integer manipulations
+int atoi(const char* str);  // Convert ASCII character to integer
+char* itoa(int num);        // Convert integer to ASCII character
+char* xtoa(uint32_t num);   // Convert hexdecimal integer to ASCII character
 
-#endif // COMMON_H
+// Functions for CLI (Command Line Interface) I/O
+void putchar(char chr);         // Print a single character to the CLI output
+void puts(char* str);           // Print a string to the CLI output
+void printf(char* format, ...); // Print formatted output to the CLI output
+char* scanf(char* header);      // Read user input and return the entered string
