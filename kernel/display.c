@@ -1,67 +1,58 @@
 #include "display.h"
 
-uint16_t* DisplayMemory = (uint16_t*)0xB8000;
+// Define Video Memory
+uint16_t* display_VideoMemory = (uint16_t*)0xB8000;
 
-Color DisplayTextColor = COLOR_WHITE;
-Color DisplayBackgroundColor = COLOR_BLACK;
-
+// Function for clear the entire screen
 void display_clear() {
-    for (int i = 0; i < (DisplayWidth * DisplayHeight); ++i) {
-        DisplayMemory[i] =
-            (((short)DisplayBackgroundColor & 0x000F) << 12) |
-            (((short)DisplayTextColor & 0x000F) << 8) |
-            (short)0x0000;
-    };
+    for (int i = 0; i < (display_CLIWIDTH * display_CLIHEIGHT); ++i) {
+        display_VideoMemory[i] =
+            (display_VideoMemory[i] & (short)0xFF00) | (short)0x0000;
+    }
 }
 
-void display_reload() {
-    for (int i = 0; i < DisplayWidth * DisplayHeight; ++i) {
-        DisplayMemory[i] =
-            (((short)DisplayBackgroundColor & 0x0F) << 12) |
-            (((short)DisplayTextColor & 0x0F) << 8) |
-            (DisplayMemory[i] & 0x00FF);
-    };
-};
-
-int display_putchar(char chr, int point) {
-    if (point < 0 || point >= (DisplayWidth * DisplayHeight)) {
-        return -1;
+// Function for print a single character at a specified position (pointer) on the screen
+void display_putchar(char chr, int ptr) {
+    if (ptr >= 0 && ptr < (display_CLIWIDTH * display_CLIHEIGHT)) {
+        display_VideoMemory[ptr] =
+            (display_VideoMemory[ptr] & (short)0xFF00) | (short)chr;
     }
-    DisplayMemory[point] =
-        (DisplayMemory[point] & 0xF000) |
-        (((short)DisplayTextColor & 0x000F) << 8) |
-        (short)chr;
-    return 0;
 }
 
-char display_getchar(int point) {
-    if (point < 0 || point >= (DisplayWidth * DisplayHeight)) {
-        return -1;
-    }
-    return (char)(DisplayMemory[point] & 0x00FF);
+// Function for get the character at a specific screen position (pointer)
+char display_getchar(int ptr) {
+    return (char)(display_VideoMemory[ptr] & (short)0x00FF);
 }
 
-int display_loadcursor(int point) {
-    if (point < 0 || point >= (DisplayWidth * DisplayHeight)) {
-        return -1;
-    }
-    for (int i = 0; i < (DisplayWidth * DisplayHeight); ++i) {
-        DisplayMemory[i] =
-            (((short)DisplayBackgroundColor & 0x0F) << 12) |
-            (((short)DisplayTextColor & 0x0F) << 8) |
-            (DisplayMemory[i] & 0x00FF);
-    }
-    DisplayMemory[point] =
-        ((DisplayMemory[point] & 0x0F00) << 4) |
-        ((DisplayMemory[point] & 0xF000) >> 4) |
-        (DisplayMemory[point] & 0x00FF);
-    return 0;
+// Function for enable the cursor, specifying the cursor size (not position)
+void display_enablecursor(uint8_t start, uint8_t end) {
+    port_outb(0x3D4, 0x0A);
+    port_outb(0x3D5, (port_inb(0x3D5) & 0xC0) | start);
+    port_outb(0x3D4, 0x0B);
+    port_outb(0x3D5, (port_inb(0x3D5) & 0xE0) | end);
 }
 
-void display_setTextColor(Color color) { DisplayTextColor = color; };
+// Function for disable the cursor (hide it from the screen)
+void display_disablecursor() {
+    port_outb(0x3D4, 0x0A);
+    port_outb(0x3D5, 0x20);
+}
 
-void display_setBackgroundColor(Color color) { DisplayBackgroundColor = color; };
+// Function for set the cursor to a specific screen position (pointer)
+void display_putcursor(int ptr) {
+    // uint16_t ptr = y * display_CLIWIDTH + x;
+    port_outb(0x3D4, 0x0F);
+    port_outb(0x3D5, (uint8_t)(ptr & 0xFF));
+    port_outb(0x3D4, 0x0E);
+    port_outb(0x3D5, (uint8_t)((ptr >> 8) & 0xFF));
+}
 
-Color display_getTextColor() { return DisplayTextColor; };
-
-Color display_getBackgroundColor() { return DisplayBackgroundColor; };
+// Function for get the current position of the cursor
+size_t display_getcursor() {
+    size_t ptr = 0;
+    port_outb(0x3D4, 0x0F);
+    ptr |= port_inb(0x3D5);
+    port_outb(0x3D4, 0x0E);
+    ptr |= ((size_t)port_inb(0x3D5)) << 8;
+    return ptr;
+}
