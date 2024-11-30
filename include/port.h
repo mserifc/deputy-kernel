@@ -1,14 +1,8 @@
-#ifndef PORT_H
-#define PORT_H
+#pragma once
 
 #include "types.h"
 
-typedef struct {
-    uint8_t (*inb)(uint16_t port);
-    void (*outb)(uint16_t port, uint8_t value);
-} Port;
-
-uint8_t port_inb(uint16_t port);
-void port_outb(uint16_t port, uint8_t value);
-
-#endif // PORT_H
+// Function Prototypes
+uint8_t port_inb(uint16_t port);                    // Set Port Input Function (inb)
+void port_outb(uint16_t port, uint8_t value);       // Set Port Output Function (outb)
+void port_ioWait(void);                             // Set I/O Wait Function
