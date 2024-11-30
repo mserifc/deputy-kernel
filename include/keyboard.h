@@ -1,15 +1,13 @@
-#ifndef KEYBOARD_H
-#define KEYBOARD_H
+#pragma once
 
 #include "types.h"
 #include "port.h"
+#include "interrupts.h"
+#include "common.h"
 
-typedef struct {
-    uint8_t (*scankeycode)();
-    char (*scankey)();
-} Keyboard;
+#define KEYBOARD_PORT 0x60
 
 uint8_t keyboard_scankeycode();
 char keyboard_scankey();
 
-#endif // KEYBOARD_H
+// void keyboard_init();
