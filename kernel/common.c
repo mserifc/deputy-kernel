@@ -1,57 +1,61 @@
 #include "common.h"
 
-int CursorLocation = 0;
-bool CursorVisibility = true;
+// Cursor Environment Variables
+int CursorLocation = 0;             // Cursor position
+bool CursorVisibility = true;       // Cursor visibility
 
-char ScannedPrompt[PromptLength];
-int PromptPointer = 0;
+// Prompt Environment Variables
+char ScannedPrompt[PROMPT_LENGTH];  // Scanned prompt
+int PromptPointer = 0;              // Prompt pointer
 
-char* StrTokens[MaxStrTokens];
-int StrTokenCount = 0;
+// String Manipulation Environment Variables
+char* StrTokens[MAX_STR_TOKENS];    // String token vector
+int StrTokenCount = 0;              // String token count
+char StrResult[10];                 // String result
 
-int IntDigits[MaxIntDigits];
-int IntDigitCount = 0;
+// Integer Manipulation Environment Variables
+int IntDigits[MAX_INT_DIGITS];      // Integer digit vector
+int IntDigitCount = 0;              // Integer digit count
 
-char toASCIIresult[10];
-
-int setCursorLocation(int point) {
-    if (point < 0 || point >= DisplayWidth * DisplayHeight) {
-        return -1;
-    }
-    CursorLocation = point;
-    return 0;
+// Function for update the cursor
+int updateCursor() {
+    display_putcursor(CursorLocation);
+    return CursorLocation;
 }
 
-int setCursorVisibility(bool toggle) {
-    if (toggle == true || toggle == false) {
-        CursorVisibility = toggle;
-        return 0;
-    } else { return -1; }
-}
-
-int getCursorLocation() { return CursorLocation; }
-
+// Function for get string tokens
 int getStrTokenCount() { return StrTokenCount; }
 
+// Function for get integer digits
 int getIntDigitCount() { return IntDigitCount; }
 
+// Function to introduce a delay (based on CPU speed)
+void delay(uint32_t count) {
+    for (uint32_t i = 0; i < count; ++i) {
+        asm volatile ("nop");
+    }
+}
+
+// Function for scroll down the CLI Display
 int scrolldown(int times) {
     if (times < 0) { return -1; }
     for (int i = 0; i < times; ++i) {
-        for (int j = 0; j < (DisplayWidth * (DisplayHeight - 1)); ++j) {
-            if (display_putchar(display_getchar(j + DisplayWidth), j) == -1) { /* Handle error */ }
+        for (int j = 0; j < (display_CLIWIDTH * (display_CLIHEIGHT - 1)); ++j) {
+            display_putchar(display_getchar(j + display_CLIWIDTH), j);
         }
-        for (int j = ((DisplayHeight - 1) * DisplayWidth); j < DisplayWidth * DisplayHeight; ++j) {
-            if (display_putchar('\0', j) == -1) { /* Handle error */ }
+        for (int j = ((display_CLIHEIGHT - 1) * display_CLIWIDTH); j < display_CLIWIDTH * display_CLIHEIGHT; ++j) {
+            display_putchar('\0', j);
         }
     }
     return 0;
 }
 
+// Function for check if a character is a digit (returns true if the character is a number)
 bool isdigit(char chr) {
     return chr >= '0' && chr <= '9';
 }
 
+// Function for split a string
 char** split(char* str) {
     int i = 0;
     int start = 0;
@@ -59,20 +63,21 @@ char** split(char* str) {
     while (str[i] != 0) {
         if (str[i] == ' ') {
             str[i] = '\0';
-            if (StrTokenCount < MaxStrTokens) {
+            if (StrTokenCount < MAX_STR_TOKENS) {
                 StrTokens[StrTokenCount++] = (char*)&str[start];
             }
             start = i + 1;
         }
         i++;
     }
-    if (StrTokenCount < MaxStrTokens) {
+    if (StrTokenCount < MAX_STR_TOKENS) {
         StrTokens[StrTokenCount++] = (char*)&str[start];
     }
     StrTokens[StrTokenCount] = 0;
     return StrTokens;
 }
 
+// Function for split a integer
 int* splitdigits(int num) {
     int temp = num;
     int count = 0;
@@ -93,6 +98,7 @@ int* splitdigits(int num) {
     return IntDigits;
 }
 
+// Function for fill a block of memory with specific value
 void* memset(void* ptr, char value, size_t num) {
     uint8_t* point = ptr;
     for (size_t i = 0; i < num; i++) {
@@ -101,6 +107,7 @@ void* memset(void* ptr, char value, size_t num) {
     return ptr;
 }
 
+// Function for copy a block of memory from source to destination
 void* memcpy(void* dest, const void* src, size_t num) {
     uint8_t* destination = dest;
     const uint8_t* source = src;
@@ -110,13 +117,7 @@ void* memcpy(void* dest, const void* src, size_t num) {
     return dest;
 }
 
-char* strreset(char* str) {
-    for (int i = 0; i != '\0'; ++i) {
-        str[i] = '\0';
-    }
-    return str;
-}
-
+// Function for get the length of specific string
 int strlen(char* str) {
     int len = 0;
     for (int i = 0; str[i] != '\0'; ++i) {
@@ -125,6 +126,7 @@ int strlen(char* str) {
     return len;
 }
 
+// Function for copy a string to another one
 char* strcpy(char* dest, const char* src) {
 	char* original_dest = dest;
 	while (*src != '\0') {
@@ -136,6 +138,7 @@ char* strcpy(char* dest, const char* src) {
 	return original_dest;
 }
 
+// Function for compare two strings
 int strcmp(const char* str1, const char* str2) {
 	while (*str1 && (*str1 == *str2)) {
 		str1++;
@@ -144,6 +147,7 @@ int strcmp(const char* str1, const char* str2) {
 	return *(unsigned char*)str1 - *(unsigned char*)str2;
 }
 
+// Function for format and write output to a string
 int snprintf(char* buffer, size_t size, char* format, ...) {
     va_list args;
     int written = 0;
@@ -200,6 +204,7 @@ int snprintf(char* buffer, size_t size, char* format, ...) {
     return written;
 }
 
+// Function for convert ASCII character to integer
 int atoi(const char* str) {
     int result = 0;
     int sign = 1;
@@ -219,8 +224,9 @@ int atoi(const char* str) {
     return sign * result;
 }
 
+// Function for convert integer to ASCII character
 char* itoa(int num) {
-    strreset(toASCIIresult);
+    memset(StrResult, 0, strlen(StrResult));
     int temp = num;
     int digit_count = 0;
     int i;
@@ -236,72 +242,78 @@ char* itoa(int num) {
     if (is_negative) {
         digit_count++;
     }
-    toASCIIresult[digit_count] = '\0';
+    StrResult[digit_count] = '\0';
     for (i = digit_count - 1; i >= 0; i--) {
         if (is_negative && i == 0) {
-            toASCIIresult[i] = '-';
+            StrResult[i] = '-';
         } else {
-            toASCIIresult[i] = (num % 10) + '0';
+            StrResult[i] = (num % 10) + '0';
             num /= 10;
         }
     }
-    return toASCIIresult;
+    return StrResult;
 }
 
+// Function for convert hexdecimal integer to ASCII character
 char* xtoa(uint32_t num) {
-    strreset(toASCIIresult);
+    memset(StrResult, 0, strlen(StrResult));
     int i = 0;
     if (num == 0) {
-        toASCIIresult[i++] = '0';
-        toASCIIresult[i] = '\0';
-        return toASCIIresult;
+        StrResult[i++] = '0';
+        StrResult[i] = '\0';
+        return StrResult;
     }
     while (num != 0) {
         int remainder = num % 16;
         if (remainder < 10) {
-            toASCIIresult[i++] = remainder + '0';
+            StrResult[i++] = remainder + '0';
         } else {
-            toASCIIresult[i++] = (remainder - 10) + 'A';
+            StrResult[i++] = (remainder - 10) + 'A';
         }
         num /= 16;
     }
-    toASCIIresult[i] = '\0';
+    StrResult[i] = '\0';
     for (int j = 0; j < i / 2; j++) {
-        char temp = toASCIIresult[j];
-        toASCIIresult[j] = toASCIIresult[i - j - 1];
-        toASCIIresult[i - j - 1] = temp;
+        char temp = StrResult[j];
+        StrResult[j] = StrResult[i - j - 1];
+        StrResult[i - j - 1] = temp;
     }
-    return toASCIIresult;
+    return StrResult;
 }
 
+// Function for print a single character to the CLI output
 void putchar(char chr) {
     if (chr == '\n') {
-        CursorLocation = (CursorLocation / DisplayWidth + 1) * DisplayWidth;
+        CursorLocation = (CursorLocation / display_CLIWIDTH + 1) * display_CLIWIDTH;
     } else {
-        if (display_putchar(chr, CursorLocation) == -1) { /* Handle error */ }
+        display_putchar(chr, CursorLocation);
         CursorLocation++;
     }
-    if (CursorLocation >= DisplayWidth * DisplayHeight) {
+    if (CursorLocation >= display_CLIWIDTH * display_CLIHEIGHT) {
         scrolldown(1);
-        CursorLocation = (DisplayHeight - 1) * DisplayWidth;
+        CursorLocation = (display_CLIHEIGHT - 1) * display_CLIWIDTH;
     }
+    updateCursor();
 }
 
+// Function for print a string to the CLI output
 void puts(char* str) {
     for (int i = 0; str[i] != '\0'; ++i) {
         if (str[i] == '\n') {
-            CursorLocation = (CursorLocation / DisplayWidth + 1) * DisplayWidth;
+            CursorLocation = (CursorLocation / display_CLIWIDTH + 1) * display_CLIWIDTH;
         } else {
-            if (display_putchar(str[i], CursorLocation) == -1) { /* Handle error */ }
+            display_putchar(str[i], CursorLocation);
             CursorLocation++;
         }
-        if (CursorLocation >= DisplayWidth * DisplayHeight) {
+        if (CursorLocation >= display_CLIWIDTH * display_CLIHEIGHT) {
             scrolldown(1);
-            CursorLocation = (DisplayHeight - 1) * DisplayWidth;
+            CursorLocation = (display_CLIHEIGHT - 1) * display_CLIWIDTH;
         }
     }
+    updateCursor();
 }
 
+// Function for print formatted output to the CLI output
 void printf(char* format, ...) {
     va_list args;
     va_start(args, format);
@@ -340,46 +352,51 @@ void printf(char* format, ...) {
             }
             i++;
         } else if (format[i] == '\n') {
-            CursorLocation = (CursorLocation / DisplayWidth + 1) * DisplayWidth;
+            CursorLocation = (CursorLocation / display_CLIWIDTH + 1) * display_CLIWIDTH;
         } else {
-            if (display_putchar(format[i], CursorLocation) == -1) { /* Handle error */ }
+            display_putchar(format[i], CursorLocation);
             CursorLocation++;
         }
-        if (CursorLocation >= DisplayWidth * DisplayHeight) {
+        if (CursorLocation >= display_CLIWIDTH * display_CLIHEIGHT) {
             scrolldown(1);
-            CursorLocation = (DisplayHeight - 1) * DisplayWidth;
+            CursorLocation = (display_CLIHEIGHT - 1) * display_CLIWIDTH;
         }
     }
     va_end(args);
+    updateCursor();
 }
 
+// Function for read user input and return the entered string
 char* scanf(char* header) {
-    for (int i = 0; i < PromptLength; ++i) {
+    for (int i = 0; i < PROMPT_LENGTH; ++i) {
         ScannedPrompt[i] = '\0';
     }
     PromptPointer = 0;
     printf(header);
-    if (CursorVisibility) { display_loadcursor(CursorLocation); }
+    updateCursor();
     while (1) {
         char input = keyboard_scankey();
-        if (input == -1) { /* Handle error */ }
         if (input != '\0') {
             if (input == 0x0E) {
                 if (PromptPointer > 0 && strlen(ScannedPrompt) > 0) {
                     PromptPointer--;
                     ScannedPrompt[PromptPointer] = '\0';
                     CursorLocation--;
-                    if (display_putchar('\0', CursorLocation) == -1) { /* Handle error */ }
+                    display_putchar('\0', CursorLocation);
+                    updateCursor();
                 }
             } else if (input == 0x1C) {
-                ScannedPrompt[PromptLength - 1] = '\0';
+                ScannedPrompt[PROMPT_LENGTH - 1] = '\0';
+                updateCursor();
                 return ScannedPrompt;
-            } else if (PromptPointer < PromptLength - 1) {
+            } else if (PromptPointer < PROMPT_LENGTH - 1) {
                 ScannedPrompt[PromptPointer] = input;
                 PromptPointer++;
                 putchar(input);
+                updateCursor();
             }
         }
-        if (CursorVisibility) { display_loadcursor(CursorLocation); }
+        updateCursor();
     }
+    updateCursor();
 }
