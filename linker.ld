@@ -1,10 +1,11 @@
-ENTRY(_kernel_entry)
+ENTRY(kernel_entry)
 OUTPUT_FORMAT(elf32-i386)
 OUTPUT_ARCH(i386:i386)
 
 SECTIONS
 {
-    . = 0x200000;
+    . = 0x100000;
+    _start = .;
 
     .text :
     {
@@ -33,4 +34,7 @@ SECTIONS
         *(.fini_array*)
         *(.comment)
     }
+
+    . = ALIGN(8);
+    _end = .;
 }
