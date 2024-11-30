@@ -46,7 +46,7 @@ The following features are planned for future development:
 
 ## Getting Started
 
-*Note:* Before building the kernel, you need to install i386-elf-gcc to your computer.
+**Note:** Before building the kernel, you need to install i386-elf-gcc to your computer.
 
 To build and run the kernel, follow these steps:
 
