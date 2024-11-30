@@ -1,64 +1,89 @@
 #include "kernel.h"
 
-#define MemoryEntry 0x100000
-#define MemorySize (1 * 1024 * 1024)
-#define MemoryPageSize (16 * 1024)
-#define MemoryPageCount (MemorySize / MemoryPageSize)
+// Pointor of allocable memory space for Memory Manager (Available memory space)
+void* memory_Space;
 
-void* MemorySpace = (void*)MemoryEntry;
+// Allocable memory block list
+struct memory_Block memory_BlockList[memory_BLOCKCOUNT];
 
-char MemoryUsageReport[100];
+// Memory report structure
+struct memory_Report_t memory_Report;
 
-typedef struct {
-    size_t number;
-    bool allocted;
-    void* entry;
-} MemoryPage;
+// Memory report message buffer
+char memory_ReportMessage[memory_REPORTMSGLENGTH];
 
-MemoryPage MemoryPageList[MemoryPageCount];
-
+// Initialize Memory Manager
 void memory_init() {
-    for (size_t i = 0; i < MemoryPageCount; ++i) {
-        MemoryPageList[i].number = i;
-        MemoryPageList[i].allocted = false;
-        MemoryPageList[i].entry = (void*)(MemoryEntry + (i * MemoryPageSize));
+    memory_Space = (void*)kernel_getSize() + 1;
+    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
+        memory_BlockList[i].number = i;
+        memory_BlockList[i].allocated = false;
+        memory_BlockList[i].entry = (void*)((void*)memory_Space + (i * memory_BLOCKSIZE));
     }
-    memset(MemorySpace, 0, MemorySize);
+    memset(memory_Space, 0, memory_SIZE);
 }
 
+// Allocate a memory block
 void* memory_allocate() {
-    for (size_t i = 0; i < MemoryPageCount; ++i) {
-        if (MemoryPageList[i].allocted == false) {
-            MemoryPageList[i].allocted = true;
-            return MemoryPageList[i].entry;
+    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
+        if (memory_BlockList[i].allocated == false) {
+            memory_BlockList[i].allocated = true;
+            return memory_BlockList[i].entry;
         }
     }
 }
 
+// Free a specific allocated memory blcok
 void memory_free(void* allocated) {
     if (allocated == null) { return; }
-    size_t targetpagenumber = (((size_t)allocated) - MemoryEntry) / MemoryPageSize;
-    MemoryPageList[targetpagenumber].allocted = false;
-    memset(allocated, 0, (size_t)MemoryPageSize);
+    size_t num = ((size_t)allocated - (size_t)memory_Space) / memory_BLOCKSIZE;
+    memory_BlockList[num].allocated = false;
+    memset(allocated, 0, (size_t)memory_BLOCKSIZE);
     allocated = null;
 }
 
-char* memory_report() {
-    size_t usingblocks = 0;
-    size_t usingsize = 0;
-    size_t emptyblocks = 0;
-    size_t emptysize = 0;
-    for (size_t i = 0; i < MemoryPageCount; ++i) {
-        if (MemoryPageList[i].allocted) {
-            usingblocks++;
-            usingsize+=MemoryPageSize;
+// Give a memory report
+struct memory_Report_t memory_report() {
+    size_t using_blocks = 0;
+    size_t using_size = 0;
+    size_t empty_blocks = 0;
+    size_t empty_size = 0;
+    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
+        if (memory_BlockList[i].allocated) {
+            using_blocks++;
+            using_size += memory_BLOCKSIZE;
         } else {
-            emptyblocks++;
-            emptysize+=MemoryPageSize;
+            empty_blocks++;
+            empty_blocks += memory_BLOCKSIZE;
         }
     }
-    snprintf(MemoryUsageReport, 100,
-        "%d blocks (%d byte) using, %d blocks (%d byte) free",
-        usingblocks, usingsize, emptyblocks, emptysize);
-    return MemoryUsageReport;
+    memory_Report.using_blocks = using_blocks;
+    memory_Report.using_size = using_size;
+    memory_Report.empty_blocks = empty_blocks;
+    memory_Report.empty_size = empty_size;
+    return memory_Report;
+}
+
+// Write a memory report
+char* memory_reportMessage() {
+    size_t using_blocks = 0;
+    size_t using_size = 0;
+    size_t empty_blocks = 0;
+    size_t empty_size = 0;
+    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
+        if (memory_BlockList[i].allocated) {
+            using_blocks++;
+            using_size += memory_BLOCKSIZE;
+        } else {
+            empty_blocks++;
+            empty_blocks += memory_BLOCKSIZE;
+        }
+    }
+    memset(memory_ReportMessage, 0, (size_t)memory_REPORTMSGLENGTH);
+    snprintf(
+        memory_ReportMessage, (size_t)memory_REPORTMSGLENGTH,
+        "%d blocks (%d byte) in use, %d blocks (%d byte) free",
+        using_blocks, using_size, empty_blocks, empty_size
+    );
+    return memory_ReportMessage;
 }
