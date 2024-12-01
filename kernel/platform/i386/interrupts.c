@@ -55,7 +55,7 @@ void interrupts_exceptionHandler(uint8_t num) {
 
 // Default interrupt handler if no handler is set
 void interrupts_defaultHandler(void) {
-    printf("Unknown Interrupt Triggered!");     // Print a message for an unknown interrupt
+    printf("Interrupt Manager: Unknown Interrupt Triggered!\n");    // Print a message for an unknown interrupt
 }
 
 // Send End-of-Interrupt (EOI) signal to the PIC
