@@ -2,19 +2,125 @@
 #include "kernel.h"
 
 #include "types.h"
+#include "common.h"
+
 #include "gdt.h"
 #include "port.h"
 #include "interrupts.h"
-#include "detect.h"
+
 #include "display.h"
 #include "keyboard.h"
-#include "common.h"
+
+#include "ramfs.h"
 
 // Kernel code start and end (Set in linker.ld)
 extern char _start, _end;
 
 // Kernel Size
 size_t kernel_size;
+
+// Memory Lower (Below 1MB) and Upper (Above 1MB) Sizes
+size_t kernel_MemoryLowerSize;
+size_t kernel_MemoryUpperSize;
+
+// Boot Device Number
+uint32_t kernel_BootDevice;
+
+// Boot Devices (as string)
+char* kernel_BootDeviceStr[] = {
+    "Invalid",
+    "Harddisk",
+    "Floppy",
+    "CDROM",
+    "USB",
+    "Network",
+    "SCSI"
+};
+
+// Function for get memory size
+size_t kernel_getMemorySize() { return kernel_MemoryLowerSize + kernel_MemoryUpperSize; }
+
+// Function for get boot device number
+uint32_t kernel_getBootDevice() { return kernel_BootDevice; }
+
+// Function for get boot device as string
+char* kernel_getBootDeviceStr() { return kernel_BootDeviceStr[kernel_getBootDevice()]; }
+
+// Function for initialize hardware detector
+void kernel_initHWDetector(multiboot_info_t* info) {
+    kernel_MemoryLowerSize = info->mem_lower;   // Get lower (Below 1MB) memory size
+    kernel_MemoryUpperSize = info->mem_upper;   // Get upper (Above 1MB) memory size
+    if (info->flags & (1 << 4)) {               // Check boot device flag
+        kernel_BootDevice = info->boot_device;  // Get boot device if boot device flag set
+    } else {
+        kernel_BootDevice = 0;                  // Else set boot device invalid
+    }
+}
+
+// Kernel Default Command Handler
+int kernel_commandHandler(char* str) {
+    if (strlen(str) <= 0) { putchar('\n'); return 0; }
+    char* cmd = str;
+    char** argv = split(str);
+    int argc = getStrTokenCount();
+    if (strlen(argv[0]) <= 0) { putchar('\n'); return 0; }
+    if (argc > 0) {
+        if (argv[0] && strcmp(argv[0], "echo") == 0) {
+            for (int i = 1; i < argc; ++i) {
+                printf(argv[i]);
+                putchar(' ');
+            }
+            putchar('\n'); return 0;
+        } else if (argv[0] && strcmp(argv[0], "clear") == 0) {
+            display_clear();
+            putcursor(0);
+            return 0;
+        } else if (argv[0] && strcmp(argv[0], "ls") == 0) {
+            struct ramfs_Directory* dir = ramfs_getDirectory();
+            for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
+        } else if (argv[0] && strcmp(argv[0], "cat") == 0) {
+            char* data;
+            for (int i = 1; i < argc; ++i) {
+                data = ramfs_readFile(argv[i]);
+                if (data == null) {
+                    printf("File %s not found\n", argv[i]); return -1;
+                } else {
+                    printf("%s\n", data);
+                }
+            }
+        } else if (argv[0] && strcmp(argv[0], "touch") == 0) {
+            for (int i = 1; i < argc; ++i) {
+                if (ramfs_writeFile(argv[i], "") == -1) { printf("Unable to write %s\n", argv[i]); return -1; }
+            }
+        } else if (argv[0] && strcmp(argv[0], "write") == 0) {
+            char data[ramfs_MAX_FILE_SIZE];
+            memset(data, 0, ramfs_MAX_FILE_SIZE);
+            int ptr = 0;
+            for (int i = 2; i < argc; ++i) {
+                for (int j = 0; j < strlen(argv[i]); ++j) {
+                    data[ptr] = argv[i][j]; ptr++;
+                }
+                data[ptr] = ' '; ptr++;
+            }
+            if (ramfs_writeFile(argv[1], data) == -1) { printf("Unable to write file\n"); return -1; }
+        } else if (argv[0] && strcmp(argv[0], "rm") == 0) {
+            for (int i = 1; i < argc; ++i) {
+                if (ramfs_removeFile(argv[i]) == -1) { printf("File %s not found\n", argv[i]); return -1; }
+            }
+        } else if (argv[0] && strcmp(argv[0], "devtools") == 0) {
+            if (argv[1] && strcmp(argv[1], "panic") == 0) {
+                kernel_panic("Manually triggered");
+            } else {
+                printf("Unknown developer tool.\n");
+                return -1;
+            }
+        } else {
+            printf("Command %s not found\n", argv[0]);
+            return -1;
+        }
+    } else { putchar('\n'); return 0; }
+    return 0;
+}
 
 // Kernel Main
 void kernel_main(void) {
@@ -35,6 +141,26 @@ void kernel_main(void) {
     puts("---- Memory Test Ended ----\n");
     putchar('\n');
 
+    puts("---- File System Test Started ----\n");
+    struct ramfs_Directory* dir = ramfs_getDirectory();
+    printf("File list:\n"); for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
+    ramfs_writeFile("myfile.txt", "Merhaba, Dunya!");
+    printf("'myfile.txt' created.\n");
+    printf("File list:\n"); for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
+    printf("'myfile.txt' content: %s\n", ramfs_readFile("myfile.txt"));
+    ramfs_removeFile("myfile.txt");
+    printf("'myfile.txt' removed.\n");
+    printf("File list:\n"); for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
+    puts("---- File System Test Ended ----\n");
+    putchar('\n');
+
+    while(1) {
+        char* prompt = scanf("# ");
+        putchar('\n');
+        if (prompt && strcmp(prompt, "exit") == 0) { break; }
+        if (kernel_commandHandler(prompt) == -1) { /* Handle error */ }
+    }
+
     kernel_panic("Switched to idle");   // Switch to idle if no process
 }
 
@@ -42,7 +168,8 @@ void kernel_main(void) {
 void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
     display_enablecursor(14, 15);       // Enable Display Cursor
     display_clear();                    // Clear Display
-    display_putcursor(0);               // Set Cursor to Top-Left Corner
+    // Set Cursor to Bottom-Left Corner
+    display_putcursor(0); putcursor(display_CLIWIDTH * (display_CLIHEIGHT - 1));
 
     if (boot_magic != MULTIBOOT_BOOTLOADER_MAGIC) {             // Check Magic Number
         kernel_panic("Invalid multiboot magic number");
@@ -77,15 +204,16 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
 
     kernel_size = (size_t)&_end - (size_t)&_start;
     printf("Kernel Size: %d byte\n", kernel_size);
-    printf("Boot device: %d (%s)\n", detect_getBootDevice(), detect_getBootDeviceStr());
+    printf("Boot device: %d (%s)\n", kernel_getBootDevice(), kernel_getBootDeviceStr());
     putchar('\n');
 
     // Initialize Kernel
     puts("---- Initializing Kernel ----\n");
     puts("Initializing Global Descriptor Table...\n"); gdt_init();
     puts("Initializing Interrupt Manager...\n"); interrupts_init();
-    puts("Initializing Hardware Detector...\n"); detect_init(boot_info);
+    puts("Initializing Hardware Detector...\n"); kernel_initHWDetector(boot_info);
     puts("Initializing Memory Manager...\n"); memory_init();
+    puts("Initializing RAM File System...\n"); ramfs_init();
     puts("---- Initializing Ended ----\n");
     putchar('\n');
     // while(1);
