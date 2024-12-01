@@ -29,16 +29,19 @@ KERNEL = $(BUILD_DIR)/kernel.elf
 OBJECTS = \
 	$(BUILD_DIR)/entry.o \
 	$(BUILD_DIR)/kernel.o \
-	$(BUILD_DIR)/port.o \
-	$(BUILD_DIR)/gdt_flush.o \
-	$(BUILD_DIR)/gdt_init.o \
-	$(BUILD_DIR)/interrupts.o \
-	$(BUILD_DIR)/interrupt_stubs.o \
-	$(BUILD_DIR)/detect.o \
 	$(BUILD_DIR)/memory.o \
-	$(BUILD_DIR)/display.o \
-	$(BUILD_DIR)/keyboard.o \
-	$(BUILD_DIR)/common.o
+	$(BUILD_DIR)/common.o \
+	\
+	$(BUILD_DIR)/platform/i386/port.o \
+	$(BUILD_DIR)/platform/i386/gdt_flush.o \
+	$(BUILD_DIR)/platform/i386/gdt_init.o \
+	$(BUILD_DIR)/platform/i386/interrupts.o \
+	$(BUILD_DIR)/platform/i386/interrupt_stubs.o \
+	\
+	$(BUILD_DIR)/drivers/display.o \
+	$(BUILD_DIR)/drivers/keyboard.o \
+	\
+	$(BUILD_DIR)/filesystem/ramfs.o
 
 # Emulator
 EMULATOR = qemu-system-i386
@@ -55,14 +58,16 @@ $(BUILD_DIR):
 
 # Compile C Code Files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
+	mkdir -p $(@D)
 	$(CC) $(CC_FLAGS) -c $< -o $@
 
 # Assemble Assembly Files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.s | $(BUILD_DIR)
+	mkdir -p $(@D)
 	$(AS) $(AS_FLAGS) $< -o $@
 
 # Link Objects
-$(KERNEL): $(OBJECTS)
+$(KERNEL): linker.ld $(OBJECTS)
 	$(LD) $(LD_FLAGS) -T linker.ld -o $@ $(OBJECTS)
 
 # Run with Emulator
@@ -71,7 +76,7 @@ run:
 
 # Cleanup
 clean:
-	rm -f $(BUILD_DIR)/*.o $(KERNEL)
+	rm -f $(OBJECTS) $(KERNEL)
 
 # Mark 'all', 'run', and 'clean' as non-file targets.
 .PHONY: all run clean
