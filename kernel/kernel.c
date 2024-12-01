@@ -154,6 +154,7 @@ void kernel_main(void) {
     puts("---- File System Test Ended ----\n");
     putchar('\n');
 
+    puts("Unable to run user shell, switching to built-in kernel shell.\n");
     while(1) {
         char* prompt = scanf("# ");
         putchar('\n');
@@ -218,6 +219,18 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
     putchar('\n');
     // while(1);
 
+    // There is a problem with PIC.
+    // I don't know why but PIC doesn't work again after detecting only 1 interrupt
+    // TODO: Fix the PIC (Programmable Interrupt Controller)
+    interrupts_PICIRQEnable(IRQ_KEYBOARD);  // Enable the keyboard IRQ 
+    while(1) {
+        printf("Waiting keyboard interrupt.\n");
+        // You probably think that the problem is with the EOI (End-Of-Interrupt) call, but it is already used here.
+        interrupts_PICSendEOI(IRQ_KEYBOARD);
+        asm volatile ("hlt");               // Halt the CPU for power saving
+        printf("continue\n");
+    }
+
     puts("Sheriff Kernel Build 23, booted successfully.\n");    // Print Kernel Boot Success Message and Build Version
     kernel_main();                                              // Switch to Kernel Main
 }
@@ -225,13 +238,14 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
 // Function for get kernel size
 size_t kernel_getSize() { return kernel_size; }
 
-
-// void test_gdt() {
-//     // Testing GDT by setting DS to invalid data segment
-//     asm volatile(
-//         "movw $0x12345, %ax;\n"
-//         "movw %ax, %ds;"
-//     );  // Invalid data segment
-//     char *str = "Test";
-//     str[0] = 'A';  // An error is expected here (General Protection Fault aka GPF)
-// }
+/*
+void test_gdt() {
+    // Testing GDT by setting DS to invalid data segment
+    asm volatile(
+        "movw $0x12345, %ax;\n"
+        "movw %ax, %ds;"
+    );  // Invalid data segment
+    char *str = "Test";
+    str[0] = 'A';  // An error is expected here (General Protection Fault aka GPF)
+}
+*/
