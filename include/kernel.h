@@ -1,5 +1,6 @@
 #pragma once
 
+#include "multiboot.h"
 #include "common.h"
 
 // Macro for handling Kernel Panic Situations
@@ -14,6 +15,30 @@
 
 // Function prototype for get kernel size
 size_t kernel_getSize();
+
+// Function prototype for handle command (Kernel Level)
+int kernel_commandHandler(char* str);
+
+// Enumeration for boot device numbers
+enum kernel_BOOTDEVICETABLE {
+    BOOTDEVICE_INVALID  = 0,    // Invalid Device (Unknown Device)
+    BOOTDEVICE_HARDDISK = 1,    // Harddisk Device
+    BOOTDEVICE_FLOPPY   = 2,    // Floppy Device
+    BOOTDEVICE_CDROM    = 3,    // CDROM Device
+    BOOTDEVICE_USB      = 4,    // USB Device
+    BOOTDEVICE_NET      = 5,    // Network Device
+    BOOTDEVICE_SCSI     = 6     // Small Computer System Interface
+};
+
+typedef enum kernel_BOOTDEVICETABLE kernel_BootDeviceType;  // Define boot device type
+
+// Function prototypes for get memory size and boot device
+size_t kernel_getMemorySize();      // Gives Memory Size
+uint32_t kernel_getBootDevice();    // Gives Boot Device
+char* kernel_getBootDeviceStr();    // Gives Boot Device (as string)
+
+// Function prototype for initialize hardware detector
+void kernel_initHWDetector(multiboot_info_t* info);   // Initialize Hardware Detector
 
 // Memory Management
 
