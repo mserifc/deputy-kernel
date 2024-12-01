@@ -23,6 +23,12 @@ int updateCursor() {
     return CursorLocation;
 }
 
+// Function for set cursor position
+void putcursor(int ptr) {
+    CursorLocation = ptr;
+    updateCursor();
+}
+
 // Function for get string tokens
 int getStrTokenCount() { return StrTokenCount; }
 
@@ -99,19 +105,19 @@ int* splitdigits(int num) {
 }
 
 // Function for fill a block of memory with specific value
-void* memset(void* ptr, char value, size_t num) {
+void* memset(void* ptr, char value, size_t size) {
     uint8_t* point = ptr;
-    for (size_t i = 0; i < num; i++) {
+    for (size_t i = 0; i < size; i++) {
         point[i] = (uint8_t)value;
     }
     return ptr;
 }
 
 // Function for copy a block of memory from source to destination
-void* memcpy(void* dest, const void* src, size_t num) {
+void* memcpy(void* dest, const void* src, size_t size) {
     uint8_t* destination = dest;
     const uint8_t* source = src;
-    for (size_t i = 0; i < num; i++) {
+    for (size_t i = 0; i < size; i++) {
         destination[i] = source[i];
     }
     return dest;
