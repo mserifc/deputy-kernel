@@ -21,6 +21,9 @@
 // Function for update the cursor
 int updateCursor();
 
+// Function for set cursor position
+void putcursor(int ptr);
+
 // Functions for get string and digit counter values
 int getStrTokenCount();     // Get string tokens
 int getIntDigitCount();     // Get integer digits
@@ -39,8 +42,8 @@ char** split(char* str);    // String splitter
 int* splitdigits(int num);  // Integer splitter
 
 // Functions for memory manipulation
-void* memset(void* ptr, char value, size_t num);        // Fill a block of memory with specific value
-void* memcpy(void* dest, const void* src, size_t num);  // Copy a block of memory from source to destination
+void* memset(void* ptr, char value, size_t size);       // Fill a block of memory with specific value
+void* memcpy(void* dest, const void* src, size_t size); // Copy a block of memory from source to destination
 
 // Functions for string manipulation
 int strlen(char* str);                                      // Get the length of specific string
