@@ -1,9 +1,10 @@
 #pragma once
 
 #include "types.h"
-#include "port.h"
-#include "display.h"
-#include "keyboard.h"
+#include "platform/i386/port.h"
+#include "platform/i386/interrupts.h"
+#include "drivers/display.h"
+#include "drivers/keyboard.h"
 
 // Define the maximum length of the user input prompt
 #define PROMPT_LENGTH 256
@@ -12,11 +13,28 @@
 #define MAX_STR_TOKENS 127
 #define MAX_INT_DIGITS 10
 
+// Define tabulation length
+#define TAB_LENGTH 4
+
+// Define RTC port values
+#define RTC_INDEX_PORT 0x70
+#define RTC_DATA_PORT 0x71
+
 // Define macros for variable argument list handling
 #define va_list __builtin_va_list                           // Type definition for variable argument list
 #define va_start(ap, last) __builtin_va_start(ap, last)     // Initialize variable argument list
 #define va_arg(ap, type) __builtin_va_arg(ap, type)         // Retrieve the next argument of a specified type
 #define va_end(ap) __builtin_va_end(ap)                     // Clean up the variable argument list
+
+// Date structure
+typedef struct {
+    uint8_t sec;    // Second
+    uint8_t min;    // Minute
+    uint8_t hour;   // Hour
+    uint8_t day;    // Day
+    uint8_t mon;    // Month
+    uint16_t year;  // Year
+} date_t;
 
 // Function for update the cursor
 int updateCursor();
@@ -28,8 +46,24 @@ void putcursor(int ptr);
 int getStrTokenCount();     // Get string tokens
 int getIntDigitCount();     // Get integer digits
 
-// Function to introduce a delay (based on CPU speed)
-void delay(uint32_t count);
+// Function for convert binary-coded decimal to decimal
+uint8_t bcd2dec(uint8_t bcd);
+
+// Function for read RTC (Real Time Clock)
+void readRTC (
+    uint8_t* sec,
+    uint8_t* min,
+    uint8_t* hour,
+    uint8_t* day,
+    uint8_t* mon,
+    uint16_t* year
+);
+
+// Functions for timing, scheduling and clock
+// void schedulefn(int sec, void* fn); // Schedule a function for run after a certain amount of time
+date_t date();                      // Get RTC date
+void delay(uint32_t count);         // Introduce a delay (based on CPU speed)
+void sleep(uint32_t sec);           // Sleep the system for a certain amount of time (based on RTC)
 
 // Function for scroll down the CLI Display
 int scrolldown(int times);
@@ -38,21 +72,23 @@ int scrolldown(int times);
 bool isdigit(char chr);
 
 // Functions for split strings and integers
-char** split(char* str);    // String splitter
-int* splitdigits(int num);  // Integer splitter
+char** split(char* str, char deli); // String splitter
+int* splitdigits(int num);          // Integer splitter
 
 // Functions for memory manipulation
 void* memset(void* ptr, char value, size_t size);       // Fill a block of memory with specific value
 void* memcpy(void* dest, const void* src, size_t size); // Copy a block of memory from source to destination
 
 // Functions for string manipulation
-int strlen(char* str);                                      // Get the length of specific string
-char* strcpy(char* dest, const char* src);                  // Copy a string to another one
-int strcmp(const char* str1, const char* str2);             // Compare two strings
-int snprintf(char* buffer, size_t size, char* format, ...); // Format and write output to a string
+int strlen(char* str);                                          // Get the length of specific string
+char* strcpy(char* dest, const char* src);                      // Copy a string to another one
+char* strncpy(char* dest, const char* src, size_t num);         // Copy a string to another one (with limit)
+int strcmp(const char* str1, const char* str2);                 // Compare two strings
+int strncmp(const char* str1, const char* str2, size_t num);    // Compare two strings (with limit)
+int snprintf(char* buffer, size_t size, char* format, ...);     // Format and write output to a string
 
 // Functions for string-integer manipulations
-int atoi(const char* str);  // Convert ASCII character to integer
+int atoi(char* str);        // Convert ASCII character to integer
 char* itoa(int num);        // Convert integer to ASCII character
 char* xtoa(uint32_t num);   // Convert hexdecimal integer to ASCII character
 
