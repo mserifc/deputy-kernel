@@ -4,84 +4,98 @@
 void* memory_Space;
 
 // Allocable memory block list
-struct memory_Block memory_BlockList[memory_BLOCKCOUNT];
-
-// Memory report structure
-struct memory_Report_t memory_Report;
+struct memory_Block memory_Blocklist[MEMORY_BLOCKCOUNT];
 
 // Memory report message buffer
-char memory_ReportMessage[memory_REPORTMSGLENGTH];
+char memory_ReportMessage[MEMORY_REPORTMESSAGELENGTH];
 
-// Initialize Memory Manager
+// Function for initialize memory manager
 void memory_init() {
-    memory_Space = (void*)kernel_getSize() + 1;
-    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
-        memory_BlockList[i].number = i;
-        memory_BlockList[i].allocated = false;
-        memory_BlockList[i].entry = (void*)((void*)memory_Space + (i * memory_BLOCKSIZE));
+    memory_Space = (void*)(KERNEL_ENTRY + kernel_getSize() + 1);
+    for (size_t i = 0; i < MEMORY_BLOCKCOUNT; ++i) {
+        memory_Blocklist[i].number = i;
+        memory_Blocklist[i].count = 0;
+        memory_Blocklist[i].allocated = false;
+        memory_Blocklist[i].entry = (void*)((void*)memory_Space + (i * MEMORY_BLOCKSIZE));
     }
-    memset(memory_Space, 0, memory_SIZE);
+    memset(memory_Space, 0, MEMORY_SIZE);
 }
 
-// Allocate a memory block
-void* memory_allocate() {
-    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
-        if (memory_BlockList[i].allocated == false) {
-            memory_BlockList[i].allocated = true;
-            return memory_BlockList[i].entry;
+// Function for allocate memory
+void* malloc(size_t size) {
+    size_t count, base, found;
+    bool status = 0;
+    if (size == 0) {
+        return NULL;
+    } else if (size > MEMORY_BLOCKSIZE) {
+        count = (size / MEMORY_BLOCKSIZE) + 1;
+    } else {
+        count = 1;
+    }
+    found = 0;
+    for (size_t i = 0; i < MEMORY_BLOCKCOUNT; ++i) {
+        if (!memory_Blocklist[i].allocated) {
+            for (size_t j = 0; j < count; ++j) {
+                if (i + j >= MEMORY_BLOCKCOUNT) { return NULL; }
+                if (memory_Blocklist[i + j].allocated) {
+                    found = 0;
+                    break;
+                } else {
+                    found++;
+                }
+            }
+        }
+        if (found >= count) {
+            base = i;
+            status = true;
+            break;
+        } else {
+            found = 0;
         }
     }
+    if (!status) { return NULL; }
+    for (size_t i = 0; i < count; ++i) {
+        memory_Blocklist[base + i].allocated = true;
+    }
+    memory_Blocklist[base].count = count;
+    return memory_Blocklist[base].entry;
 }
 
-// Free a specific allocated memory blcok
-void memory_free(void* allocated) {
-    if (allocated == null) { return; }
-    size_t num = ((size_t)allocated - (size_t)memory_Space) / memory_BLOCKSIZE;
-    memory_BlockList[num].allocated = false;
-    memset(allocated, 0, (size_t)memory_BLOCKSIZE);
-    allocated = null;
+// Function for free a specific allocated memory blcok
+void free(void* allocated) {
+    if (
+        allocated == NULL ||
+        (size_t)allocated < (size_t)memory_Space ||
+        (size_t)allocated >= (size_t)memory_Space + MEMORY_SIZE
+    ) { return; }
+    size_t num = ((size_t)allocated - (size_t)memory_Space) / MEMORY_BLOCKSIZE;
+    size_t count = memory_Blocklist[num].count;
+    for (size_t i = 0; i < count; ++i) {
+        memory_Blocklist[num + i].allocated = false;
+        memory_Blocklist[num + i].count = 0;
+    }
+    allocated = NULL;
 }
 
-// Give a memory report
-struct memory_Report_t memory_report() {
-    size_t using_blocks = 0;
-    size_t using_size = 0;
-    size_t empty_blocks = 0;
-    size_t empty_size = 0;
-    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
-        if (memory_BlockList[i].allocated) {
+// Function for write a memory report
+char* memory_report() {
+    size_t
+        using_blocks = 0,
+        using_size = 0,
+        empty_blocks = 0,
+        empty_size = 0;
+    for (size_t i = 0; i < MEMORY_BLOCKCOUNT; ++i) {
+        if (memory_Blocklist[i].allocated) {
             using_blocks++;
-            using_size += memory_BLOCKSIZE;
+            using_size += MEMORY_BLOCKSIZE;
         } else {
             empty_blocks++;
-            empty_blocks += memory_BLOCKSIZE;
+            empty_size += MEMORY_BLOCKSIZE;
         }
     }
-    memory_Report.using_blocks = using_blocks;
-    memory_Report.using_size = using_size;
-    memory_Report.empty_blocks = empty_blocks;
-    memory_Report.empty_size = empty_size;
-    return memory_Report;
-}
-
-// Write a memory report
-char* memory_reportMessage() {
-    size_t using_blocks = 0;
-    size_t using_size = 0;
-    size_t empty_blocks = 0;
-    size_t empty_size = 0;
-    for (size_t i = 0; i < memory_BLOCKCOUNT; ++i) {
-        if (memory_BlockList[i].allocated) {
-            using_blocks++;
-            using_size += memory_BLOCKSIZE;
-        } else {
-            empty_blocks++;
-            empty_blocks += memory_BLOCKSIZE;
-        }
-    }
-    memset(memory_ReportMessage, 0, (size_t)memory_REPORTMSGLENGTH);
+    memset(memory_ReportMessage, 0, (size_t)MEMORY_REPORTMESSAGELENGTH);
     snprintf(
-        memory_ReportMessage, (size_t)memory_REPORTMSGLENGTH,
+        memory_ReportMessage, (size_t)MEMORY_REPORTMESSAGELENGTH,
         "%d blocks (%d byte) in use, %d blocks (%d byte) free",
         using_blocks, using_size, empty_blocks, empty_size
     );

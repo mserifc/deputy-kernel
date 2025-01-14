@@ -1,21 +1,24 @@
 #include "common.h"
 
-// Cursor Environment Variables
+// Cursor environment variables
 int CursorLocation = 0;             // Cursor position
 bool CursorVisibility = true;       // Cursor visibility
 
-// Prompt Environment Variables
+// Prompt environment variables
 char ScannedPrompt[PROMPT_LENGTH];  // Scanned prompt
 int PromptPointer = 0;              // Prompt pointer
 
-// String Manipulation Environment Variables
+// String manipulation environment variables
 char* StrTokens[MAX_STR_TOKENS];    // String token vector
 int StrTokenCount = 0;              // String token count
 char StrResult[10];                 // String result
 
-// Integer Manipulation Environment Variables
+// Integer manipulation environment variables
 int IntDigits[MAX_INT_DIGITS];      // Integer digit vector
 int IntDigitCount = 0;              // Integer digit count
+
+// Date result
+date_t Date;
 
 // Function for update the cursor
 int updateCursor() {
@@ -35,10 +38,120 @@ int getStrTokenCount() { return StrTokenCount; }
 // Function for get integer digits
 int getIntDigitCount() { return IntDigitCount; }
 
-// Function to introduce a delay (based on CPU speed)
+// Function for convert binary-coded decimal to decimal
+uint8_t bcd2dec(uint8_t bcd) { return (bcd & 0x0F) + ((bcd >> 4) * 10); }
+
+// Function for read RTC (Real Time Clock)
+void readRTC (
+    uint8_t* sec,
+    uint8_t* min,
+    uint8_t* hour,
+    uint8_t* day,
+    uint8_t* mon,
+    uint16_t* year
+) {
+    port_outb(RTC_INDEX_PORT, 0x00);
+    *sec = port_inb(RTC_DATA_PORT);
+
+    port_outb(RTC_INDEX_PORT, 0x02);
+    *min = port_inb(RTC_DATA_PORT);
+
+    port_outb(RTC_INDEX_PORT, 0x04);
+    *hour = port_inb(RTC_DATA_PORT);
+
+    port_outb(RTC_INDEX_PORT, 0x07);
+    *day = port_inb(RTC_DATA_PORT);
+
+    port_outb(RTC_INDEX_PORT, 0x08);
+    *mon = port_inb(RTC_DATA_PORT);
+
+    port_outb(RTC_INDEX_PORT, 0x09);
+    *year = port_inb(RTC_DATA_PORT);
+
+    *sec = bcd2dec(*sec);
+    *min = bcd2dec(*min);
+    *hour = bcd2dec(*hour);
+    *day = bcd2dec(*day);
+    *mon = bcd2dec(*mon);
+    *year = bcd2dec(*year) + 2000;
+}
+
+// Function for get RTC date
+date_t date() {
+    readRTC(
+        &Date.sec,
+        &Date.min,
+        &Date.hour,
+        &Date.day,
+        &Date.mon,
+        &Date.year
+    );
+    return Date;
+}
+
+// Function for introduce a delay (based on CPU speed)
 void delay(uint32_t count) {
     for (uint32_t i = 0; i < count; ++i) {
         asm volatile ("nop");
+    }
+}
+
+// Sleep the system for a certain amount of time (based on RTC)
+// void sleep_old(uint32_t sec) {
+//     SleepDate = date();
+//     for (int i = 0; i < sec; ++i) {
+//         if (SleepDate.sec+1 > 59) {
+//             SleepDate.sec = 0;
+//             if (SleepDate.min+1 > 59) {
+//                 SleepDate.min = 0;
+//                 if (SleepDate.hour+1 > 23) {
+//                     // Do nothing, ignore.
+//                 } else {
+//                     SleepDate.hour++;
+//                 }
+//             } else {
+//                 SleepDate.min++;
+//             }
+//         }
+//     }
+//     interrupts_IDTSetGate(INTERRUPTS_PIC_MASTER_OFFSET+INTERRUPTS_IRQ_TIMER, (size_t)timerHandler);
+//     SleepState = false;
+//     interrupts_PICIRQEnable(INTERRUPTS_IRQ_TIMER);
+//     while (true) {
+//         asm volatile ("hlt");
+//         if (SleepState == false) { asm volatile ("sti"); continue; }
+//         if (
+//             date().sec >= SleepDate.sec &&
+//             date().min >= SleepDate.min &&
+//             date().hour >= SleepDate.hour
+//         ) {
+//             SleepState = false; break;
+//         } else { SleepState = false; asm volatile ("sti"); continue; }
+//     }
+// }
+
+// Sleep the system for a certain amount of time (based on RTC)
+void sleep(uint32_t sec) {
+    uint32_t targetTime =
+        (date().day * 24 * 60 * 60) +
+        (date().hour * 60 * 60) +
+        (date().min * 60) +
+        date().sec + sec;
+    asm volatile ("cli");
+    interrupts_PICIRQEnable(INTERRUPTS_IRQ_TIMER);
+    while (true) {
+        asm volatile ("sti");
+        asm volatile ("hlt");
+        if (
+            (date().day * 24 * 60 * 60) +
+            (date().hour * 60 * 60) +
+            (date().min * 60) +
+            date().sec >= targetTime
+        ) {
+            asm volatile ("sti");
+            return;
+        }
+        asm volatile ("sti");
     }
 }
 
@@ -46,10 +159,10 @@ void delay(uint32_t count) {
 int scrolldown(int times) {
     if (times < 0) { return -1; }
     for (int i = 0; i < times; ++i) {
-        for (int j = 0; j < (display_CLIWIDTH * (display_CLIHEIGHT - 1)); ++j) {
-            display_putchar(display_getchar(j + display_CLIWIDTH), j);
+        for (int j = 0; j < (DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1)); ++j) {
+            display_putchar(display_getchar(j + DISPLAY_CLIWIDTH), j);
         }
-        for (int j = ((display_CLIHEIGHT - 1) * display_CLIWIDTH); j < display_CLIWIDTH * display_CLIHEIGHT; ++j) {
+        for (int j = ((DISPLAY_CLIHEIGHT - 1) * DISPLAY_CLIWIDTH); j < DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT; ++j) {
             display_putchar('\0', j);
         }
     }
@@ -62,12 +175,12 @@ bool isdigit(char chr) {
 }
 
 // Function for split a string
-char** split(char* str) {
+char** split(char* str, char deli) {
     int i = 0;
     int start = 0;
     StrTokenCount = 0;
     while (str[i] != 0) {
-        if (str[i] == ' ') {
+        if (str[i] == deli) {
             str[i] = '\0';
             if (StrTokenCount < MAX_STR_TOKENS) {
                 StrTokens[StrTokenCount++] = (char*)&str[start];
@@ -144,6 +257,23 @@ char* strcpy(char* dest, const char* src) {
 	return original_dest;
 }
 
+// function for copy a string to another one (with limit)
+char* strncpy(char* dest, const char* src, size_t num) {
+    char* original_dest = dest;
+    while (num > 0 && *src != '\0') {
+        *dest = *src;
+        dest++;
+        src++;
+        num--;
+    }
+    while (num > 0) {
+        *dest = '\0';
+        dest++;
+        num--;
+    }
+    return original_dest;
+}
+
 // Function for compare two strings
 int strcmp(const char* str1, const char* str2) {
 	while (*str1 && (*str1 == *str2)) {
@@ -151,6 +281,17 @@ int strcmp(const char* str1, const char* str2) {
 		str2++;
 	}
 	return *(unsigned char*)str1 - *(unsigned char*)str2;
+}
+
+// Function for compare two strings (with limit)
+int strncmp(const char* str1, const char* str2, size_t num) {
+    while (num > 0) {
+        if (*str1 != *str2) { return 1; }
+        str1++;
+        str2++;
+        num--;
+    }
+    return *(unsigned char*)str1 - *(unsigned char*)str2;
 }
 
 // Function for format and write output to a string
@@ -211,21 +352,23 @@ int snprintf(char* buffer, size_t size, char* format, ...) {
 }
 
 // Function for convert ASCII character to integer
-int atoi(const char* str) {
+int atoi(char* str) {
     int result = 0;
     int sign = 1;
+    int ptr = 0;
 
-    while (*str == ' ') {
-        str++;
+    while (str[ptr] == ' ') {
+        ptr++;
     }
-    if (*str == '-') {
+    if (str[ptr] == '-') {
         sign = -1;
-        str++;
-    } else if (*str == '+') {
-        str++;
+        ptr++;
+    } else if (str[ptr] == '+') {
+        ptr++;
     }
-    while (isdigit(*str)) {
-        result = result * 10 + (*str - '0');
+    while (isdigit(str[ptr])) {
+        result = result * 10 + (str[ptr] - '0');
+        ptr++;
     }
     return sign * result;
 }
@@ -290,14 +433,19 @@ char* xtoa(uint32_t num) {
 // Function for print a single character to the CLI output
 void putchar(char chr) {
     if (chr == '\n') {
-        CursorLocation = (CursorLocation / display_CLIWIDTH + 1) * display_CLIWIDTH;
+        CursorLocation = (CursorLocation / DISPLAY_CLIWIDTH + 1) * DISPLAY_CLIWIDTH;
+    } else if (chr == '\t') {
+        for (int i = 0; i < TAB_LENGTH; ++i) {
+            display_putchar(' ', CursorLocation);
+            CursorLocation++;
+        }
     } else {
         display_putchar(chr, CursorLocation);
         CursorLocation++;
     }
-    if (CursorLocation >= display_CLIWIDTH * display_CLIHEIGHT) {
+    if (CursorLocation >= DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT) {
         scrolldown(1);
-        CursorLocation = (display_CLIHEIGHT - 1) * display_CLIWIDTH;
+        CursorLocation = (DISPLAY_CLIHEIGHT - 1) * DISPLAY_CLIWIDTH;
     }
     updateCursor();
 }
@@ -306,14 +454,19 @@ void putchar(char chr) {
 void puts(char* str) {
     for (int i = 0; str[i] != '\0'; ++i) {
         if (str[i] == '\n') {
-            CursorLocation = (CursorLocation / display_CLIWIDTH + 1) * display_CLIWIDTH;
+            CursorLocation = (CursorLocation / DISPLAY_CLIWIDTH + 1) * DISPLAY_CLIWIDTH;
+        } else if (str[i] == '\t') {
+            for (int j = 0; j < TAB_LENGTH; ++j) {
+                display_putchar(' ', CursorLocation);
+                CursorLocation++;
+            }
         } else {
             display_putchar(str[i], CursorLocation);
             CursorLocation++;
         }
-        if (CursorLocation >= display_CLIWIDTH * display_CLIHEIGHT) {
+        if (CursorLocation >= DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT) {
             scrolldown(1);
-            CursorLocation = (display_CLIHEIGHT - 1) * display_CLIWIDTH;
+            CursorLocation = (DISPLAY_CLIHEIGHT - 1) * DISPLAY_CLIWIDTH;
         }
     }
     updateCursor();
@@ -358,14 +511,14 @@ void printf(char* format, ...) {
             }
             i++;
         } else if (format[i] == '\n') {
-            CursorLocation = (CursorLocation / display_CLIWIDTH + 1) * display_CLIWIDTH;
+            CursorLocation = (CursorLocation / DISPLAY_CLIWIDTH + 1) * DISPLAY_CLIWIDTH;
         } else {
             display_putchar(format[i], CursorLocation);
             CursorLocation++;
         }
-        if (CursorLocation >= display_CLIWIDTH * display_CLIHEIGHT) {
+        if (CursorLocation >= DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT) {
             scrolldown(1);
-            CursorLocation = (display_CLIHEIGHT - 1) * display_CLIWIDTH;
+            CursorLocation = (DISPLAY_CLIHEIGHT - 1) * DISPLAY_CLIWIDTH;
         }
     }
     va_end(args);
@@ -382,8 +535,16 @@ char* scanf(char* header) {
     updateCursor();
     while (1) {
         char input = keyboard_scankey();
-        if (input != '\0') {
-            if (input == 0x0E) {
+        if (
+            input != '\0' &&
+            input != KEYBOARD_KEY_ESCAPE &&
+            input != '\t' &&
+            input != KEYBOARD_KEY_CAPSLOCK &&
+            input != KEYBOARD_KEY_LEFT_SHIFT &&
+            input != KEYBOARD_KEY_LEFT_CTRL &&
+            input != KEYBOARD_KEY_LEFT_ALT
+        ) {
+            if (input == '\b') {
                 if (PromptPointer > 0 && strlen(ScannedPrompt) > 0) {
                     PromptPointer--;
                     ScannedPrompt[PromptPointer] = '\0';
@@ -391,7 +552,7 @@ char* scanf(char* header) {
                     display_putchar('\0', CursorLocation);
                     updateCursor();
                 }
-            } else if (input == 0x1C) {
+            } else if (input == '\n') {
                 ScannedPrompt[PROMPT_LENGTH - 1] = '\0';
                 updateCursor();
                 return ScannedPrompt;

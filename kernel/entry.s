@@ -2,10 +2,10 @@
 .set FLAGS, (1<<0 | 1<<1)           # Multiboot Flags (Send Memory Info and Boot Dervice)
 .set CHECKSUM, -(MAGIC + FLAGS)     # Multiboot Checksum for Verify Header
 
-.section .multiboot         # Multiboot Header
-    .long MAGIC             # Set Magic Number
-    .long FLAGS             # Set Flags
-    .long CHECKSUM          # Set Checksum
+.section .multiboot     # Multiboot Header
+    .long MAGIC         # Set Magic Number
+    .long FLAGS         # Set Flags
+    .long CHECKSUM      # Set Checksum
 
 .section .text              # Code Section
     .extern kernel_init     # Include Kernel Initialize Function

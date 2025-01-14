@@ -1,20 +1,17 @@
-#include "multiboot.h"
 #include "kernel.h"
 
-#include "types.h"
-#include "common.h"
+#include "platform/i386/port.h"
+#include "platform/i386/gdt.h"
+#include "platform/i386/interrupts.h"
 
-#include "gdt.h"
-#include "port.h"
-#include "interrupts.h"
+#include "drivers/display.h"
+#include "drivers/keyboard.h"
+#include "drivers/disk.h"
 
-#include "display.h"
-#include "keyboard.h"
-
-#include "ramfs.h"
+#include "filesystem/ownfs.h"
 
 // Kernel code start and end (Set in linker.ld)
-extern char _start, _end;
+extern char kernel_start, kernel_end;
 
 // Kernel Size
 size_t kernel_size;
@@ -37,6 +34,12 @@ char* kernel_BootDeviceStr[] = {
     "SCSI"
 };
 
+// Working shell path
+char path[OWNFS_MAX_NAME_LENGTH + 1];
+
+// Function for get kernel size
+size_t kernel_getSize() { return kernel_size; }
+
 // Function for get memory size
 size_t kernel_getMemorySize() { return kernel_MemoryLowerSize + kernel_MemoryUpperSize; }
 
@@ -57,11 +60,24 @@ void kernel_initHWDetector(multiboot_info_t* info) {
     }
 }
 
-// Kernel Default Command Handler
-int kernel_commandHandler(char* str) {
+// Function for list file system directory structure
+void test_listastree() {
+    struct ownfs_Root* root = ownfs_getRoot();
+    printf("Listing directory structure:\n");
+    printf("    root:\n");
+    for (int i = 0; i < root->dir_count; ++i) {
+        printf("        %s:\n", root->dir[i].name);
+        for (int j = 0; j < root->dir[i].file_count; ++j) {
+            printf("            %s\n", root->dir[i].file[j].name);
+        }
+    }
+};
+
+// Kernel command handler
+int kernel_commandHandler(char* path, char* str) {
     if (strlen(str) <= 0) { putchar('\n'); return 0; }
     char* cmd = str;
-    char** argv = split(str);
+    char** argv = split(str, ' ');
     int argc = getStrTokenCount();
     if (strlen(argv[0]) <= 0) { putchar('\n'); return 0; }
     if (argc > 0) {
@@ -71,42 +87,155 @@ int kernel_commandHandler(char* str) {
                 putchar(' ');
             }
             putchar('\n'); return 0;
+        } else if (argv[0] && strcmp(argv[0], "date") == 0) {
+            printf("%d:%d:%d %d/%d/%d\n",
+                date().hour, date().min, date().sec, date().day, date().mon, date().year);
+        } else if (argv[0] && strcmp(argv[0], "sleep") == 0) {
+            sleep(atoi(argv[1]));
+        } else if (argv[0] && strcmp(argv[0], "cd") == 0) {
+            if (argv[0] && strcmp(argv[0], "cd") == 0) {
+                if (argc > 1) {
+                    if (argv[1] && strcmp(argv[1], ".") == 0) { return 0; }
+                    if (
+                        argv[1] &&
+                        strcmp(argv[1], "..") == 0 ||
+                        strcmp(argv[1], "/") == 0
+                    ) { strcpy(path, "/"); return 0; }
+                    if (argv[1][0] == '/') {
+                        if (ownfs_findDirIndex(&argv[1][1]) != -1) {
+                            snprintf(path, OWNFS_MAX_NAME_LENGTH + 1, "/%s", &argv[1][1]);
+                        } else { printf("Directory %s not found\n", argv[1]); return -1; }
+                    } else {
+                        if (ownfs_findDirIndex(argv[1]) != -1) {
+                            snprintf(path, OWNFS_MAX_NAME_LENGTH + 1, "/%s", argv[1]);
+                        } else { printf("Directory %s not found\n", argv[1]); return -1; }
+                    }
+                } else { strcpy(path, "/"); }
+                return -1;
+            }
+        } else if (argv[0] && strcmp(argv[0], "pwd") == 0) {
+            printf("%s\n", path);
+        } else if (argv[0] && strcmp(argv[0], "lstree") == 0) {
+            struct ownfs_Root* root = ownfs_getRoot();
+            printf("/\n");
+            for (int i = 0; i < root->dir_count; ++i) {
+                printf("    %s/\n", root->dir[i].name);
+                for (int j = 0; j < root->dir[i].file_count; ++j) {
+                    printf("        %s\n", root->dir[i].file[j].name);
+                }
+            }
+        } else if (argv[0] && strcmp(argv[0], "ls") == 0) {
+            if (argc == 1) {
+                if (path && strcmp(path, "/") == 0) {
+                    for (int i = 0; i < ownfs_getRoot()->dir_count; ++i) {
+                        printf("%s\n", ownfs_getRoot()->dir[i].name);
+                    }
+                } else {
+                    struct ownfs_Directory* dir = ownfs_findDir(&path[1]);
+                    if (dir != NULL) {
+                        for (int i = 0; i < dir->file_count; ++i) {
+                            printf("%s\n", dir->file[i].name);
+                        }
+                        return 0;
+                    } else { printf("Working directory not found\n"); return -1; }
+                }
+            } else if (argc == 2) {
+                if (argv[1] && strcmp(argv[1], "/") == 0) {
+                    for (int i = 0; i < ownfs_getRoot()->dir_count; ++i) {
+                        printf("%s\n", ownfs_getRoot()->dir[i].name);
+                    }
+                    return 0;
+                }
+                for (int i = 0; i < strlen(argv[1]); ++i) {
+                    if (argv[1][i] == '/') { printf("File system does not support multi-level directories\n"); return -1; }
+                }
+                struct ownfs_Directory* dir = ownfs_findDir(argv[1]);
+                if (dir != NULL) {
+                    for (int i = 0; i < dir->file_count; ++i) {
+                        printf("%s\n", dir->file[i].name);
+                    }
+                    return 0;
+                } else { printf("Directory not found\n"); return -1; }
+            } else { printf("Too much arguments\n"); return -1; }
+        } else if (argv[0] && strcmp(argv[0], "cat") == 0) {
+            if (argc > 1) {
+                if (path && strcmp(path, "/") == 0) { printf("Operation not supported by the file system\n"); return -1; }
+                struct ownfs_Directory* dir = ownfs_findDir(&path[1]);
+                if (dir == NULL) { printf("Working directory not found\n"); return -1; }
+                for (int i = 1; i < argc; ++i) {
+                    if (ownfs_readFile(&path[1], argv[i]) != NULL) {
+                        printf("%s", ownfs_readFile(&path[1], argv[i]));
+                    } else { printf("File %s not found\n", argv[i]); return -1; }
+                }
+                putchar('\n'); return 0;
+            } else { printf("Too few arguments\n"); return -1; }
+        } else if (argv[0] && strcmp(argv[0], "mkdir") == 0) {
+            if (path && strcmp(path, "/") == 0) {
+                for (int i = 0; i < strlen(argv[1]); ++i) {
+                    if (argv[1][i] == '/') { printf("File system does not support multi-level directories\n"); return -1; }
+                }
+                if (ownfs_createDir(argv[1]) == -1) { printf("Unable to create directory %s\n", argv[1]); return -1; }
+            } else { printf("File system does not support multi-level directories\n"); return -1; }
+        } else if (argv[0] && strcmp(argv[0], "rmdir") == 0) {
+            if (path && strcmp(path, "/") == 0) {
+                for (int i = 0; i < strlen(argv[1]); ++i) {
+                    if (argv[1][i] == '/') { printf("Unable to remove directory\n"); return -1; }
+                }
+                if (ownfs_removeDir(argv[1]) == -1) {printf("Unable to remove direcotry: Directory not found\n");return -1;}
+            } else { printf("Unable to remove directory: Directory not found\n"); return -1; }
+        } else if (argv[0] && strcmp(argv[0], "touch") == 0) {
+            if (argc > 1) {
+                if (path && strcmp(path, "/") != 0) {
+                    for (int i = 0; i < strlen(argv[1]); ++i) {
+                        if (argv[1][i] == '/') { printf("Operation not supported\n"); return -1; }
+                    }
+                    for (int i = 1; i < argc; ++i) {
+                        if (ownfs_writeFile(&path[1], argv[i], "") == -1) { printf("Unable to create file %s\n", argv[i]); }
+                    }
+                } else { printf("Operation not supported by the file system\n"); return -1; }
+            } else { printf("Too few arguments\n"); return -1; }
+        } else if (argv[0] && strcmp(argv[0], "write") == 0) {
+            if (path && strcmp(path, "/") == 0) {
+                printf("Operation not supported by the file system\n"); return -1;
+            } else if (argc <= 2) {
+                printf("Too few arguments\n"); return -1;
+            } else {
+                for (int i = 0; i < strlen(argv[1]); ++i) {
+                    if (argv[1][i] == '/') { printf("Operation not supported by the file system\n"); return -1; }
+                }
+                if (ownfs_findDir(&path[1]) == NULL) { printf("Working directory not found\n"); return -1; }
+                char* buffer = (char*)malloc(OWNFS_MAX_DATA_SIZE);
+                int ptr = 0;
+                for (int i = 2; i < argc; ++i) {
+                    int len = strlen(argv[i]);
+                    for (int j = 0; j < len; ++j) {
+                        buffer[ptr] = argv[i][j];
+                        ptr++;
+                    }
+                    buffer[ptr] = ' ';
+                    ptr++;
+                }
+                buffer[ptr] = '\0';
+                if (ownfs_writeFile(&path[1], argv[1], buffer) == -1) {
+                    printf("Unable to write file %s\n", argv[1]);
+                    return -1;
+                };
+            }
+        } else if (argv[0] && strcmp(argv[0], "rm") == 0) {
+            if (argc > 1) {
+                if (path && strcmp(path, "/") != 0) {
+                    for (int i = 0; i < strlen(argv[1]); ++i) {
+                        if (argv[1][i] == '/') { printf("Operation not supported\n"); return -1; }
+                    }
+                    for (int i = 1; i < argc; ++i) {
+                        if (ownfs_removeFile(&path[1], argv[i]) == -1) { printf("Unable to remove file %s\n", argv[i]); }
+                    }
+                } else { printf("Operation not supported by the file system\n"); return -1; }
+            } else { printf("Too few arguments\n"); return -1; }
         } else if (argv[0] && strcmp(argv[0], "clear") == 0) {
             display_clear();
             putcursor(0);
             return 0;
-        } else if (argv[0] && strcmp(argv[0], "ls") == 0) {
-            struct ramfs_Directory* dir = ramfs_getDirectory();
-            for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
-        } else if (argv[0] && strcmp(argv[0], "cat") == 0) {
-            char* data;
-            for (int i = 1; i < argc; ++i) {
-                data = ramfs_readFile(argv[i]);
-                if (data == null) {
-                    printf("File %s not found\n", argv[i]); return -1;
-                } else {
-                    printf("%s\n", data);
-                }
-            }
-        } else if (argv[0] && strcmp(argv[0], "touch") == 0) {
-            for (int i = 1; i < argc; ++i) {
-                if (ramfs_writeFile(argv[i], "") == -1) { printf("Unable to write %s\n", argv[i]); return -1; }
-            }
-        } else if (argv[0] && strcmp(argv[0], "write") == 0) {
-            char data[ramfs_MAX_FILE_SIZE];
-            memset(data, 0, ramfs_MAX_FILE_SIZE);
-            int ptr = 0;
-            for (int i = 2; i < argc; ++i) {
-                for (int j = 0; j < strlen(argv[i]); ++j) {
-                    data[ptr] = argv[i][j]; ptr++;
-                }
-                data[ptr] = ' '; ptr++;
-            }
-            if (ramfs_writeFile(argv[1], data) == -1) { printf("Unable to write file\n"); return -1; }
-        } else if (argv[0] && strcmp(argv[0], "rm") == 0) {
-            for (int i = 1; i < argc; ++i) {
-                if (ramfs_removeFile(argv[i]) == -1) { printf("File %s not found\n", argv[i]); return -1; }
-            }
         } else if (argv[0] && strcmp(argv[0], "devtools") == 0) {
             if (argv[1] && strcmp(argv[1], "panic") == 0) {
                 kernel_panic("Manually triggered");
@@ -122,61 +251,145 @@ int kernel_commandHandler(char* str) {
     return 0;
 }
 
-// Kernel Main
 void kernel_main(void) {
-    puts("Welcome!\n");                 // Print Welcome Message for User
+    puts("Welcome!\n");     // Print welcome message for user
     putchar('\n');
 
-    puts("---- Memory Test Started ----\n");
-    char* my_data = (char*)memory_allocate();
-    printf("Allocated a memory block.\n");
-    // strcpy(my_data, "Hello, World!");
-    snprintf(my_data, memory_BLOCKSIZE, "Hello, %s!", "World");
-    printf("Writed data to allocated memory block.\n");
-    printf("My data: %s\n", my_data);
-    printf("Memory usage: %s\n", memory_reportMessage());
-    memory_free(my_data);
-    printf("Allocated memory freed.\n");
-    printf("Memory usage: %s\n", memory_reportMessage());
-    puts("---- Memory Test Ended ----\n");
-    putchar('\n');
-
-    puts("---- File System Test Started ----\n");
-    struct ramfs_Directory* dir = ramfs_getDirectory();
-    printf("File list:\n"); for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
-    ramfs_writeFile("myfile.txt", "Merhaba, Dunya!");
-    printf("'myfile.txt' created.\n");
-    printf("File list:\n"); for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
-    printf("'myfile.txt' content: %s\n", ramfs_readFile("myfile.txt"));
-    ramfs_removeFile("myfile.txt");
-    printf("'myfile.txt' removed.\n");
-    printf("File list:\n"); for (int i = 0; i < dir->file_count; ++i) { printf("%s\n", dir->file[i].name); }
-    puts("---- File System Test Ended ----\n");
-    putchar('\n');
-
-    puts("Unable to run user shell, switching to built-in kernel shell.\n");
-    while(1) {
-        char* prompt = scanf("# ");
+    // * Memory manager test
+    if (false) {
+        puts("---- Memory test started ----\n");
+        printf("Memory usage: %s\n", memory_report());
+        char* my_data = (char*)malloc(9*1024);
+        if (my_data == NULL) { kernel_panic("Memory test error: Allocated memory is null"); }
+        printf("Allocated a memory block.\n");
+        // strcpy(my_data, "Hello, World!");
+        snprintf(my_data, MEMORY_BLOCKSIZE, "Hello, %s!", "World");
+        printf("Writed data to allocated memory block.\n");
+        printf("My data: %s\n", my_data);
+        printf("Memory usage: %s\n", memory_report());
+        free(my_data);
+        printf("Allocated memory freed.\n");
+        printf("Memory usage: %s\n", memory_report());
+        puts("---- Memory test ended ----\n");
         putchar('\n');
-        if (prompt && strcmp(prompt, "exit") == 0) { break; }
-        if (kernel_commandHandler(prompt) == -1) { /* Handle error */ }
     }
 
-    kernel_panic("Switched to idle");   // Switch to idle if no process
+    // * Disk driver test
+    if (false) {
+        puts("---- Disk test started ----\n");
+        if (disk_support()) {
+            char* my_data = (char*)malloc(DISK_SECTOR_SIZE);
+            printf("Allocated a memory buffer.\n");
+            snprintf(my_data, DISK_SECTOR_SIZE, "Hello, %s!", "world");
+            printf("Writed data to allocated memory buffer.\n");
+            if (disk_writeSector(0, my_data) == -1) {
+                kernel_panic("Disk test error: Disk writing sector failed");
+            }
+            printf("Writed allocated memory buffer to disk's first sector.\n");
+            memset(my_data, 0, DISK_SECTOR_SIZE);
+            snprintf(my_data, DISK_SECTOR_SIZE, "Hi, %s!", "Serif");
+            printf("Writed data to allocated memory buffer.\n");
+            if (disk_writeSector(1, my_data) == -1) {
+                kernel_panic("Disk test error: Disk writing sector failed");
+            }
+            printf("Writed allocated memory buffer to disk's second sector.\n");
+            memset(my_data, 0, DISK_SECTOR_SIZE);
+            printf("Allocated memory buffer cleaned\n");
+            if (disk_readSector(0, my_data) == -1) {
+                kernel_panic("Disk test error: Disk reading sector failed");
+            }
+            printf("Readed data from disk's first sector: %s\n", my_data);
+            if (disk_readSector(1, my_data) == -1) {
+                kernel_panic("Disk test error: Disk reading sector failed");
+            }
+            printf("Readed data from disk's second sector: %s\n", my_data);
+            free(my_data);
+            printf("Allocated memory buffer freed.\n");
+        } else { puts("Disk test failed: Device does not support ATA disk controller.\n"); }
+        puts("---- Disk test ended ----\n");
+        putchar('\n');
+    }
+
+    // * File system test
+    if (false) {
+        puts("---- File system test started ----\n");
+        printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
+        test_listastree();
+        // sleep(3);
+        printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
+        test_listastree();
+        // sleep(3);
+        printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "Hello, world!"));
+        test_listastree();
+        printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
+        // sleep(3);
+        printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "How are you?"));
+        test_listastree();
+        printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
+        // sleep(3);
+        printf("Requested to remove a file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
+        test_listastree();
+        printf("Finding removed file (code %d)\n", ownfs_findFileIndex("docs", "readme.txt"));
+        // sleep(3);
+        printf("Requested to remove a removed file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
+        test_listastree();
+        // sleep(3);
+        printf("Requested to remove a directory (code: %d)\n", ownfs_removeDir("docs"));
+        test_listastree();
+        printf("Finding removed directory (code %d)\n", ownfs_findDirIndex("docs"));
+        // sleep(3);
+        printf("Requested to remove a removed directory (code: %d)\n", ownfs_removeDir("docs"));
+        test_listastree();
+        // sleep(3);
+        puts("---- File system test ended ----\n");
+        putchar('\n');
+    }
+
+    // Loading file system session from disk
+    puts("Loading file system session from disk...");
+    if (ownfs_load() == -1) {
+        puts("\nAn error occured while loading the file system session from disk.\n");
+    } else { puts(" Success.\n"); }
+
+    // * Built-in kernel shell
+    if (true) {
+        puts("Unable to run user shell, switching to built-in kernel shell.\n");
+        ownfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 24");
+        ownfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 24, booted successfully.");
+        ownfs_writeFile("system", "readme.txt", "Thanks for using my kernel ;)");
+        strcpy(path, "/");
+        char* header;
+        while(1) {
+            snprintf(header, OWNFS_MAX_NAME_LENGTH + 3, "%s # ", path);
+            char* prompt = scanf(header);
+            putchar('\n');
+            if (prompt && strcmp(prompt, "exit") == 0) { printf("Process completed\n"); break; }
+            if (kernel_commandHandler(path, prompt) == -1) { /* Handle error */ }
+        }
+    }
+
+    // Saving file system session to disk
+    puts("Saving file system session to disk...");
+    if (ownfs_save() == -1) {
+        puts("An error occured while loading the file system session to disk.\n");
+    } else { puts(" Success.\n"); }
+    ownfs_disable();
+
+    kernel_panic("No processes to execute");    // Switch to idle if no process
 }
 
-// Kernel Initialize
 void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
-    display_enablecursor(14, 15);       // Enable Display Cursor
-    display_clear();                    // Clear Display
-    // Set Cursor to Bottom-Left Corner
-    display_putcursor(0); putcursor(display_CLIWIDTH * (display_CLIHEIGHT - 1));
+    display_init();     // Initialize display driver
+    display_clear();    // Clear display
+    // Set cursor to bottom-left corner
+    display_putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));  // Set on display
+    putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));          // Set on common libraries
 
-    if (boot_magic != MULTIBOOT_BOOTLOADER_MAGIC) {             // Check Magic Number
+    if (boot_magic != MULTIBOOT_BOOTLOADER_MAGIC) {                 // Check magic number
         kernel_panic("Invalid multiboot magic number");
     }
 
-    if (!(boot_info->flags >> 6 & 0x01)) {                      // Check Memory map
+    if (!(boot_info->flags >> 6 & 0x01)) {                          // Check memory map
         kernel_panic("Invalid memory map given by bootloader");
     }
 
@@ -203,49 +416,37 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
         putchar('\n');
     }
 
-    kernel_size = (size_t)&_end - (size_t)&_start;
-    printf("Kernel Size: %d byte\n", kernel_size);
-    printf("Boot device: %d (%s)\n", kernel_getBootDevice(), kernel_getBootDeviceStr());
+    // Print information about device and kernel
+    kernel_size = (size_t)&kernel_end - (size_t)&kernel_start;  // Calculate kernel size
+    printf("Kernel Size: %d byte\n", kernel_size);              // Print kernel size
+    printf("Boot device: %d (%s)\n",                            // Print boot device
+        kernel_getBootDevice(), kernel_getBootDeviceStr());
+    printf("Date: %d:%d:%d %d/%d/%d\n",                         // Print date
+        date().hour, date().min, date().sec, date().day, date().mon, date().year);
     putchar('\n');
 
     // Initialize Kernel
     puts("---- Initializing Kernel ----\n");
-    puts("Initializing Global Descriptor Table...\n"); gdt_init();
-    puts("Initializing Interrupt Manager...\n"); interrupts_init();
-    puts("Initializing Hardware Detector...\n"); kernel_initHWDetector(boot_info);
-    puts("Initializing Memory Manager...\n"); memory_init();
-    puts("Initializing RAM File System...\n"); ramfs_init();
+    puts("Initializing Protected Mode..."); gdt_init(); puts(" Success.\n");
+    puts("Initializing Interrupt Manager..."); interrupts_init(); puts(" Success.\n");
+    puts("Detecting Hardware..."); kernel_initHWDetector(boot_info); puts(" Success.\n");
+    if (!disk_support()) { puts("Warning: Device does not support ATA disk controller, ignoring.\n"); }
+    puts("Initializing Memory Manager..."); memory_init(); puts(" Success.\n");
+    puts("Initializing File System..."); ownfs_init(); puts(" Success.\n");
     puts("---- Initializing Ended ----\n");
     putchar('\n');
-    // while(1);
 
-    // There is a problem with PIC.
-    // I don't know why but PIC doesn't work again after detecting only 1 interrupt
-    // TODO: Fix the PIC (Programmable Interrupt Controller)
-    interrupts_PICIRQEnable(IRQ_KEYBOARD);  // Enable the keyboard IRQ 
-    while(1) {
-        printf("Waiting keyboard interrupt.\n");
-        // You probably think that the problem is with the EOI (End-Of-Interrupt) call, but it is already used here.
-        interrupts_PICSendEOI(IRQ_KEYBOARD);
-        asm volatile ("hlt");               // Halt the CPU for power saving
-        printf("continue\n");
+    // * I fixed PIC
+    // interrupts_PICIRQEnable(INTERRUPTS_IRQ_TIMER);
+    while (0) {
+        // puts("waiting for interrupt\n");
+        asm volatile ("hlt");
+        port_inb(KEYBOARD_PORT);
+        asm volatile ("sti");
+        // interrupts_PICSendEOI(INTERRUPTS_IRQ_TIMER);
+        // puts("continue\n");
     }
 
-    puts("Sheriff Kernel Build 23, booted successfully.\n");    // Print Kernel Boot Success Message and Build Version
-    kernel_main();                                              // Switch to Kernel Main
+    puts("Sheriff Kernel Build 24, booted successfully.\n");    // Print kernel boot success message and build version
+    kernel_main();                                              // Switch to kernel main
 }
-
-// Function for get kernel size
-size_t kernel_getSize() { return kernel_size; }
-
-/*
-void test_gdt() {
-    // Testing GDT by setting DS to invalid data segment
-    asm volatile(
-        "movw $0x12345, %ax;\n"
-        "movw %ax, %ds;"
-    );  // Invalid data segment
-    char *str = "Test";
-    str[0] = 'A';  // An error is expected here (General Protection Fault aka GPF)
-}
-*/
