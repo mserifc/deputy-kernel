@@ -1,35 +1,28 @@
 #include "kernel.h"
 
-#include "platform/i386/port.h"
-#include "platform/i386/gdt.h"
-#include "platform/i386/interrupts.h"
+#include "multiboot.h"
+
+#include "hardware/port.h"
+#include "hardware/protect.h"
+#include "hardware/interrupts.h"
 
 #include "drivers/display.h"
 #include "drivers/keyboard.h"
-#include "drivers/disk.h"
 
 #include "filesystem/ramfs.h"
 
-#include "sysapi/syscall.h"
-
-#include "bmp_24.h"
-#include "snail.h"
-
-// Kernel code start and end (Set in linker.ld)
-extern char kernel_start, kernel_end;
-
-// Kernel Size
-size_t kernel_size;
+// Kernel physical size
+size_t kernel_PhysicalSize;
 
 // Memory Lower (Below 1MB) and Upper (Above 1MB) Sizes
-size_t kernel_MemoryLowerSize;
-size_t kernel_MemoryUpperSize;
+size_t kernel_MemoryLowerSize;  // Memory lower size
+size_t kernel_MemoryUpperSize;  // Memory upper size
 
-// Boot Device Number
+// Kernel boot device
 uint32_t kernel_BootDevice;
 
-// Boot Devices (as string)
-char* kernel_BootDeviceStr[] = {
+// Boot devices list
+char* kernel_BootDeviceList[] = {
     "Invalid",
     "Harddisk",
     "Floppy",
@@ -39,56 +32,26 @@ char* kernel_BootDeviceStr[] = {
     "SCSI"
 };
 
-// Working shell path
-char path[RAMFS_MAX_NAME_LENGTH + 1];
+// Home path for built-in kernel shell
+char* kernel_HomePath = "/";
 
-// Check for file system is saved or not
-bool kernel_SaveFSSession = false;
+// Working path buffer for built-in kernel shell
+char kernel_WorkingPath[RAMFS_MAX_PATH_LENGTH];
 
 // Function for get kernel size
-size_t kernel_getSize() { return kernel_size; }
+size_t kernel_size() { return kernel_PhysicalSize; }
 
-// Function for get memory size
-size_t kernel_getMemorySize() { return kernel_MemoryLowerSize + kernel_MemoryUpperSize; }
+// Function for get system memory size
+size_t kernel_memsize() { return kernel_MemoryLowerSize + kernel_MemoryUpperSize; }
 
-// Function for get boot device number
-uint32_t kernel_getBootDevice() { return kernel_BootDevice; }
+// Function for get kernel boot device
+uint32_t kernel_bootdev() { return kernel_BootDevice; }
 
-// Function for get boot device as string
-char* kernel_getBootDeviceStr() { return kernel_BootDeviceStr[kernel_getBootDevice()]; }
-
-// Function for initialize hardware detector
-void kernel_initHWDetector(multiboot_info_t* info) {
-    kernel_MemoryLowerSize = info->mem_lower;   // Get lower (Below 1MB) memory size
-    kernel_MemoryUpperSize = info->mem_upper;   // Get upper (Above 1MB) memory size
-    if (info->flags & (1 << 4)) {               // Check boot device flag
-        kernel_BootDevice = info->boot_device;  // Get boot device if boot device flag set
-    } else {
-        kernel_BootDevice = 0;                  // Else set boot device invalid
-    }
+void test(void) {
+    printf("Merhaba, dunya!\n"); exit();
 }
 
-// Function for list file system directory structure
-void test_listastree() {
-    struct ramfs_Root* root = ramfs_getRoot();
-    printf("Listing directory structure:\n");
-    printf("    root:\n");
-    for (int i = 0; i < root->dir_count; ++i) {
-        printf("        %s:\n", root->dir[i].name);
-        for (int j = 0; j < root->dir[i].file_count; ++j) {
-            printf("            %s\n", root->dir[i].file[j].name);
-        }
-    }
-};
-
-// Example function for debug tests
-int test_exmfunc(uint32_t value) {
-    printf("Example function successfully called. Listing information:\n");
-    printf("    First argument value (as decimal): %d\n", value);
-    return 0;
-}
-
-void test_exmtask1() {
+void test1() {
     while (true) {
         printf("Example task 1 running...\n");
         sleep(1);
@@ -97,7 +60,7 @@ void test_exmtask1() {
     }
 }
 
-void test_exmtask2() {
+void test2() {
     while (true) {
         printf("Example task 2 working...\n");
         sleep(1);
@@ -106,7 +69,7 @@ void test_exmtask2() {
     }
 }
 
-void test_exmtask3() {
+void test3() {
     while (true) {
         printf("Example task 3 in focus...\n");
         sleep(1);
@@ -115,186 +78,350 @@ void test_exmtask3() {
     }
 }
 
-// Kernel command handler
-int kernel_commandHandler(char* path, char* str) {
-    if (strlen(str) <= 0) { putchar('\n'); return 0; }
-    char* cmd = str;
-    char** argv = split(str, ' ');
-    int argc = getStrTokenCount();
-    if (strlen(argv[0]) <= 0) { putchar('\n'); return 0; }
-    if (argc > 0) {
-        if (argv[0] && strcmp(argv[0], "echo") == 0) {
-            for (int i = 1; i < argc; ++i) {
-                printf(argv[i]);
-                putchar(' ');
-            }
-            putchar('\n'); return 0;
-        } else if (argv[0] && strcmp(argv[0], "date") == 0) {
-            printf("%d:%d:%d %d/%d/%d\n",
-                date().hour, date().min, date().sec, date().day, date().mon, date().year);
-        } else if (argv[0] && strcmp(argv[0], "sleep") == 0) {
-            sleep(atoi(argv[1]));
-        } else if (argv[0] && strcmp(argv[0], "cd") == 0) {
-            if (argv[0] && strcmp(argv[0], "cd") == 0) {
-                if (argc > 1) {
-                    if (argv[1] && strcmp(argv[1], ".") == 0) { return 0; }
-                    if (
-                        argv[1] &&
-                        strcmp(argv[1], "..") == 0 ||
-                        strcmp(argv[1], "/") == 0
-                    ) { strcpy(path, "/"); return 0; }
-                    if (argv[1][0] == '/') {
-                        if (ramfs_getDirIndex(&argv[1][1]) != -1) {
-                            snprintf(path, RAMFS_MAX_NAME_LENGTH + 1, "/%s", &argv[1][1]);
-                        } else { printf("Directory %s not found\n", argv[1]); return -1; }
-                    } else {
-                        if (ramfs_getDirIndex(argv[1]) != -1) {
-                            snprintf(path, RAMFS_MAX_NAME_LENGTH + 1, "/%s", argv[1]);
-                        } else { printf("Directory %s not found\n", argv[1]); return -1; }
-                    }
-                } else { strcpy(path, "/"); }
-                return -1;
-            }
-        } else if (argv[0] && strcmp(argv[0], "pwd") == 0) {
-            printf("%s\n", path);
-        } else if (argv[0] && strcmp(argv[0], "lstree") == 0) {
-            struct ramfs_Root* root = ramfs_getRoot();
-            printf("/\n");
-            for (int i = 0; i < root->dir_count; ++i) {
-                printf("    %s/\n", root->dir[i].name);
-                for (int j = 0; j < root->dir[i].file_count; ++j) {
-                    printf("        %s\n", root->dir[i].file[j].name);
-                }
-            }
-        } else if (argv[0] && strcmp(argv[0], "ls") == 0) {
-            if (argc == 1) {
-                if (path && strcmp(path, "/") == 0) {
-                    for (int i = 0; i < ramfs_getRoot()->dir_count; ++i) {
-                        printf("%s\n", ramfs_getRoot()->dir[i].name);
-                    }
-                } else {
-                    struct ramfs_Directory* dir = ramfs_getDir(&path[1]);
-                    if (dir != NULL) {
-                        for (int i = 0; i < dir->file_count; ++i) {
-                            printf("%s\n", dir->file[i].name);
-                        }
-                        return 0;
-                    } else { printf("Working directory not found\n"); return -1; }
-                }
-            } else if (argc == 2) {
-                if (argv[1] && strcmp(argv[1], "/") == 0) {
-                    for (int i = 0; i < ramfs_getRoot()->dir_count; ++i) {
-                        printf("%s\n", ramfs_getRoot()->dir[i].name);
-                    }
-                    return 0;
-                }
-                for (int i = 0; i < strlen(argv[1]); ++i) {
-                    if (argv[1][i] == '/') { printf("File system does not support multi-level directories\n"); return -1; }
-                }
-                struct ramfs_Directory* dir = ramfs_getDir(argv[1]);
-                if (dir != NULL) {
-                    for (int i = 0; i < dir->file_count; ++i) {
-                        printf("%s\n", dir->file[i].name);
-                    }
-                    return 0;
-                } else { printf("Directory not found\n"); return -1; }
-            } else { printf("Too much arguments\n"); return -1; }
-        } else if (argv[0] && strcmp(argv[0], "cat") == 0) {
-            if (argc > 1) {
-                if (path && strcmp(path, "/") == 0) { printf("Operation not supported by the file system\n"); return -1; }
-                struct ramfs_Directory* dir = ramfs_getDir(&path[1]);
-                if (dir == NULL) { printf("Working directory not found\n"); return -1; }
-                for (int i = 1; i < argc; ++i) {
-                    if (ramfs_readFile(&path[1], argv[i]) != NULL) {
-                        printf("%s", ramfs_readFile(&path[1], argv[i]));
-                    } else { printf("File %s not found\n", argv[i]); return -1; }
-                }
-                putchar('\n'); return 0;
-            } else { printf("Too few arguments\n"); return -1; }
-        } else if (argv[0] && strcmp(argv[0], "mkdir") == 0) {
-            if (path && strcmp(path, "/") == 0) {
-                for (int i = 0; i < strlen(argv[1]); ++i) {
-                    if (argv[1][i] == '/') { printf("File system does not support multi-level directories\n"); return -1; }
-                }
-                if (ramfs_createDir(argv[1]) == -1) { printf("Unable to create directory %s\n", argv[1]); return -1; }
-            } else { printf("File system does not support multi-level directories\n"); return -1; }
-        } else if (argv[0] && strcmp(argv[0], "rmdir") == 0) {
-            if (path && strcmp(path, "/") == 0) {
-                for (int i = 0; i < strlen(argv[1]); ++i) {
-                    if (argv[1][i] == '/') { printf("Unable to remove directory\n"); return -1; }
-                }
-                if (ramfs_removeDir(argv[1]) == -1) {printf("Unable to remove direcotry: Directory not found\n");return -1;}
-            } else { printf("Unable to remove directory: Directory not found\n"); return -1; }
-        } else if (argv[0] && strcmp(argv[0], "touch") == 0) {
-            if (argc > 1) {
-                if (path && strcmp(path, "/") != 0) {
-                    for (int i = 0; i < strlen(argv[1]); ++i) {
-                        if (argv[1][i] == '/') { printf("Operation not supported\n"); return -1; }
-                    }
-                    for (int i = 1; i < argc; ++i) {
-                        if (ramfs_writeFile(&path[1], argv[i], "", 1) == -1) { printf("Unable to create file %s\n", argv[i]); }
-                    }
-                } else { printf("Operation not supported by the file system\n"); return -1; }
-            } else { printf("Too few arguments\n"); return -1; }
-        } else if (argv[0] && strcmp(argv[0], "write") == 0) {
-            if (path && strcmp(path, "/") == 0) {
-                printf("Operation not supported by the file system\n"); return -1;
-            } else if (argc <= 2) {
-                printf("Too few arguments\n"); return -1;
-            } else {
-                for (int i = 0; i < strlen(argv[1]); ++i) {
-                    if (argv[1][i] == '/') { printf("Operation not supported by the file system\n"); return -1; }
-                }
-                if (ramfs_getDir(&path[1]) == NULL) { printf("Working directory not found\n"); return -1; }
-                char* buffer = (char*)malloc(MEMORY_BLOCKSIZE);
-                int ptr = 0;
-                for (int i = 2; i < argc; ++i) {
-                    int len = strlen(argv[i]);
-                    for (int j = 0; j < len; ++j) {
-                        buffer[ptr] = argv[i][j];
-                        ptr++;
-                    }
-                    buffer[ptr] = ' ';
-                    ptr++;
-                }
-                buffer[ptr] = '\0';
-                if (ramfs_writeFile(&path[1], argv[1], buffer, MEMORY_BLOCKSIZE) == -1) {
-                    printf("Unable to write file %s\n", argv[1]);
-                    return -1;
-                };
-            }
-        } else if (argv[0] && strcmp(argv[0], "rm") == 0) {
-            if (argc > 1) {
-                if (path && strcmp(path, "/") != 0) {
-                    for (int i = 0; i < strlen(argv[1]); ++i) {
-                        if (argv[1][i] == '/') { printf("Operation not supported\n"); return -1; }
-                    }
-                    for (int i = 1; i < argc; ++i) {
-                        if (ramfs_removeFile(&path[1], argv[i]) == -1) { printf("Unable to remove file %s\n", argv[i]); }
-                    }
-                } else { printf("Operation not supported by the file system\n"); return -1; }
-            } else { printf("Too few arguments\n"); return -1; }
-        } else if (argv[0] && strcmp(argv[0], "clear") == 0) {
-            display_clear();
-            putcursor(0);
-            return 0;
-        } else if (argv[0] && strcmp(argv[0], "devtools") == 0) {
-            if (argv[1] && strcmp(argv[1], "mem") == 0) {
-                printf("Memory usage: %s\n", memory_report());
-            } else if (argv[1] && strcmp(argv[1], "panic") == 0) {
-                kernel_panic("Manually triggered");
-            } else {
-                printf("Unknown developer tool.\n");
-                return -1;
-            }
-        } else {
-            printf("Command %s not found\n", argv[0]);
-            return -1;
-        }
-    } else { putchar('\n'); return 0; }
-    return 0;
+void testshell() {
+    int n = 0;
+    display_clear(); putcursor(0); puts("# ");
+    while (true) { sleep(1); if (n == 10) { puts(ramfs_readFile("/dev/keyboard")); } ++n; yield(); }
 }
 
+/**
+ * @brief Built-in kernel text editor
+ * 
+ * @param path Path of file for edit
+ * 
+ * @return Exit code
+ */
+int kernel_textEditor(char* path) {
+    int new = false;
+    int ptrsave = getcursor(); char* scsave = (char*)malloc(DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT);
+    if (scsave == NULL) { printf("Out of memory\n"); return EXIT_FAILURE; }
+    fill(scsave, 0, DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT);
+    for (int i = 0; i < DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT; ++i) { scsave[i] = display_getchar(i); }
+    int ptr = 0; int size = 0; char* buffer = (char*)malloc(KERNEL_TEXTEDIT_BUFFSIZE);
+    if (buffer == NULL) { printf("Out of memory\n"); free(scsave); return EXIT_FAILURE; }
+    if (path != NULL) {
+        ramfs_Entry_t* file = ramfs_stat(path);
+        if (file == NULL) { printf("No such file or directory: %s\n", path); return EXIT_FAILURE; }
+        if (file->type == RAMFS_TYPE_DIR) { printf("It's a directory\n"); return EXIT_FAILURE; }
+        // if ((((file->perm >> 6) & 7) & 2) == 0) { printf("Permission denied\n"); return EXIT_PERMISSION_DENIED; }
+        if (file->size > KERNEL_TEXTEDIT_BUFFSIZE) { printf("File too large to edit\n"); return EXIT_FAILURE; }
+        fill(buffer, 0, KERNEL_TEXTEDIT_BUFFSIZE); ncopy(buffer, ramfs_readFile(path), file->size);
+        size = file->size;
+    } else { new = true; }
+    bool edit = false; while (true) { display_clear(); putcursor(0);
+        int scstart = 0; int scend = size;
+        int ptrline = 0, linesize = 0;
+        for (int i = 0; i < ptr; ++i) {
+            if (buffer[i] == '\n' || linesize >= DISPLAY_CLIWIDTH) {
+                ++ptrline; linesize = 0;
+            } else { ++linesize; }
+        }
+        int totallines = 1; linesize = 0;
+        for (int i = 0; i < size; ++i) {
+            if (buffer[i] == '\n' || linesize >= DISPLAY_CLIWIDTH) {
+                ++totallines; linesize = 0;
+            } else { ++linesize; }
+        }
+        int startline = ptrline - DISPLAY_CLIHEIGHT / 2;
+        if (startline < 0) { startline = 0; }
+        if (startline > totallines - DISPLAY_CLIHEIGHT)
+            { startline = totallines - DISPLAY_CLIHEIGHT; }
+        if (startline < 0) { startline = 0; }
+        int currentline = 0; linesize = 0; scstart = 0;
+        for (int i = 0; i < size; ++i) {
+            if (currentline == startline) { scstart = i; break; }
+            if (buffer[i] == '\n' || linesize >= DISPLAY_CLIWIDTH) {
+                ++currentline; linesize = 0;
+            } else { ++linesize; }
+        }
+        currentline = 0; scend = size; linesize = 0;
+        for (int i = scstart; i < size; ++i) {
+            if (currentline == DISPLAY_CLIHEIGHT) { scend = i; break; }
+            if (buffer[i] == '\n' || linesize >= DISPLAY_CLIWIDTH) {
+                ++currentline; linesize = 0;
+            } else { ++linesize; }
+        }
+        for (int i = scstart; i < scend; ++i) {
+            if (i >= scend - 1 && buffer[i] == '\n') { break; }
+            if (buffer[i] != '\0') { putchar(buffer[i]); }
+        } { int scptr = 0;
+            for (int i = scstart; i < ptr; ++i) {
+                if (buffer[i] == '\n') {
+                    scptr = (scptr / DISPLAY_CLIWIDTH + 1) * DISPLAY_CLIWIDTH;
+                } else if (buffer[i] != '\0') { ++scptr; }
+            } putcursor(scptr); }
+        key_t key = keyboard_waitkey();
+        if (key == KEYBOARD_KEY_ESCAPE) {
+            if (edit) {
+                display_clear(); putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));
+                printf("Do you want to save changes? (Y/N/C) ");
+                escape_operation:
+                key = keyboard_waitkey();
+                if (key == KEYBOARD_KEY_Y) {
+                    char* writepath = path;
+                    if (new) {
+                        display_clear(); putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));
+                        char* input = prompt("New file name: ");
+                        if (split(input, ' ').c == 1) {
+                            char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH);
+                            if (buffer == NULL) { printf(" Error: Out of memory"); sleep(2); continue; }
+                            if (input[0] == '/') { copy(input, buffer); } else {
+                                snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s", kernel_WorkingPath, input);
+                            }
+                            if (ramfs_stat(buffer) != NULL) {
+                                if (ramfs_stat(buffer)->type != RAMFS_TYPE_FILE)
+                                    { printf(" Error: It's a directory"); sleep(2); continue; }
+                                display_clear(); putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));
+                                printf("Already exists, would you like to overwrite it? (Y/N/C) ");
+                                int key2 = keyboard_waitkey();
+                                if (key2 == KEYBOARD_KEY_Y) {
+                                    //
+                                } else if (key2 == KEYBOARD_KEY_N) {
+                                    break;
+                                } else { continue; }
+                            }
+                            writepath = buffer;
+                        } else { printf(" Error: Unacceptable name"); sleep(2); continue; }
+                    }
+                    int n = ramfs_writeFile(writepath, size, buffer);
+                    if (n != RAMFS_STATUS_SUCCESS) {
+                        if (n == RAMFS_STATUS_OUTOFMEMORY) { printf(" Error: Out of memory"); sleep(2); continue; }
+                        if (n == RAMFS_STATUS_NOTFILE) { printf(" Error: It's a directory"); sleep(2); continue; }
+                        if (n == RAMFS_STATUS_PATHNOTFOUND) { printf(" Error: Path not found"); sleep(2); continue; }
+                        printf(" Error occurred while writing file"); sleep(2); continue;
+                    } break;
+                } else if (key == KEYBOARD_KEY_N) {
+                    break;
+                } else if (key == KEYBOARD_KEY_C) {
+                    continue;
+                } goto escape_operation;
+            } else { break; }
+        } else if (key == KEYBOARD_KEY_SP_CURSORUP) {
+            int ptrlinelen = 0, upperlinelen = 0;
+            for (int i = 0; ptr - i > 0 && (i == 0 || buffer[ptr - i] != '\n'); ++i) { ++ptrlinelen; } 
+            ptr -= ptrlinelen;
+            if (buffer[ptr - 1] == '\n' || buffer[ptr - 1] == '\0') { continue; }
+            for (int i = 0; i == 0 || (buffer[ptr - i] != '\0' && buffer[ptr - i] != '\n'); ++i) { ++upperlinelen; }
+            if (upperlinelen < ptrlinelen) { continue; } ptr -= upperlinelen - ptrlinelen;
+        } else if (key == KEYBOARD_KEY_SP_CURSORLEFT) {
+            if (ptr > 0) { --ptr; }
+        } else if (key == KEYBOARD_KEY_SP_CURSORDOWN) {
+            int ptrlinelen = 0, lowerlinelen = 0;
+            for (int i = 0; ptr - i >= 0 && (i == 0 || buffer[ptr - i] != '\n'); ++i) { ++ptrlinelen; }
+            while (ptr < size && buffer[ptr] != '\n') { ++ptr; }
+            for (int i = 0; ptr + i < size && (i == 0 || (buffer[ptr + i] != '\0' && buffer[ptr + i] != '\n')); ++i)
+                { ++lowerlinelen; }
+            if (lowerlinelen < ptrlinelen) { ptr += lowerlinelen; continue; }
+            ptr += ptrlinelen;
+        } else if (key == KEYBOARD_KEY_SP_CURSORRIGHT) {
+            if (ptr < size) { ++ptr; }
+        } else if (key == KEYBOARD_KEY_BACKSPACE) {
+            if (!edit) { edit = true; }
+            if (ptr > 0) {
+                for (int i = ptr - 1; i < size - 1; ++i) {
+                    buffer[i] = buffer[i + 1];
+                } --ptr; --size;
+            }
+        } else if (key == KEYBOARD_KEY_TABULATION) {
+            if (!edit) { edit = true; }
+            int tablen = UTILS_TABLENGTH - (getcursor() % UTILS_TABLENGTH);
+            if (size + tablen <= KERNEL_TEXTEDIT_BUFFSIZE) {
+                for (int i = 0; i < tablen; ++i) {
+                    for (int j = size; j > ptr; --j) {
+                        buffer[j] = buffer[j - 1];
+                    } buffer[ptr] = ' '; ++ptr; ++size;
+                }
+            }
+        } else if (key == KEYBOARD_KEY_ENTER) {
+            if (!edit) { edit = true; }
+            if (size < KERNEL_TEXTEDIT_BUFFSIZE) {
+                for (int i = size; i > ptr; --i) {
+                    buffer[i] = buffer[i - 1];
+                } buffer[ptr] = '\n'; ++ptr; ++size;
+            }
+        } else if (keyboard_tochar(key) != 0) {
+            if (!edit) { edit = true; }
+            if (size < KERNEL_TEXTEDIT_BUFFSIZE) {
+                for (int i = size; i > ptr; --i) {
+                    buffer[i] = buffer[i - 1];
+                } buffer[ptr] = keyboard_tochar(key); ++ptr; ++size;
+            }
+        }
+    } for (int i = 0; i < DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT; ++i) {
+        display_putchar(scsave[i], i);
+    } putcursor(ptrsave);
+    free(buffer); free(scsave); return EXIT_SUCCESS;
+}
+
+/**
+ * @brief Built-in kernel command handler
+ * 
+ * @param path Working directory
+ * @param cmd Command to execute
+ * 
+ * @return Exit code
+ */
+int kernel_commandHandler(char* path, char* cmd) {
+    if (length(cmd) <= 0) { return 0; }
+    tokens_t arg = split(cmd, ' ');
+    if (arg.c > 0) {
+        /* --> */ if (arg.v[0] && compare(arg.v[0], "echo") == 0) {
+            for (int i = 1; i < arg.c; ++i) {
+                printf(arg.v[i]);
+                if (i+1 != arg.c){ putchar(' '); }
+            } putchar('\n'); return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "clear") == 0) {
+            display_clear(); putcursor(0); return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "pwd") == 0) {
+            printf("%s\n", path); return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "cd") == 0) {
+            if (arg.c < 2) {
+                fill(kernel_WorkingPath, 0, RAMFS_MAX_PATH_LENGTH);
+                copy(kernel_WorkingPath, kernel_HomePath);
+                return EXIT_SUCCESS;
+            } if (arg.v[1] && compare(arg.v[1], ".") == 0) {
+                return EXIT_SUCCESS;
+            } else if (arg.v[1] && compare(arg.v[1], "..") == 0) {
+                tokens_t path = split(kernel_WorkingPath, '/');
+                int ptr = 0; for (int i = 0; i < path.c - 1; ++i) { ptr += length(path.v[i]) + 1; }
+                fill(&kernel_WorkingPath[ptr+1], 0, length(&kernel_WorkingPath[ptr]));
+                return EXIT_SUCCESS;
+            }
+            if (length(arg.v[1]) >= RAMFS_MAX_PATH_LENGTH) { printf("Path too long: %s\n", arg.v[1]); return EXIT_FAILURE; }
+            if (arg.v[1][0] != '/') {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                if (arg.v[1][length(arg.v[1]) - 1] == '/') {
+                    snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s", kernel_WorkingPath, arg.v[1]);
+                } else { snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s/", kernel_WorkingPath, arg.v[1]); }
+                if (ramfs_stat(buffer) == NULL)
+                    { printf("No such directory: %s\n", arg.v[1]); return EXIT_FAILURE; }
+                fill(kernel_WorkingPath, 0, RAMFS_MAX_PATH_LENGTH); copy(kernel_WorkingPath, buffer);
+                free(buffer); return EXIT_SUCCESS;
+            }
+            if (arg.v[1][length(arg.v[1]) - 1] != '/') {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s/", arg.v[1]);
+                if (ramfs_stat(buffer) == NULL)
+                    { printf("No such directory: %s\n", arg.v[1]); return EXIT_FAILURE; }
+                fill(kernel_WorkingPath, 0, RAMFS_MAX_PATH_LENGTH); copy(kernel_WorkingPath, buffer);
+                free(buffer); return EXIT_SUCCESS;
+            }
+            if (ramfs_stat(arg.v[1]) == NULL) { printf("No such directory: %s\n", arg.v[1]); return EXIT_FAILURE; }
+            fill(kernel_WorkingPath, 0, RAMFS_MAX_PATH_LENGTH); copy(kernel_WorkingPath, arg.v[1]); return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "ls") == 0) {
+            char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+            if (arg.c < 2) { copy(buffer, path); } else {
+                if (arg.v[1][0] == '/') { copy(arg.v[1], buffer); } else {
+                    snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s/", kernel_WorkingPath, arg.v[1]);
+                }
+            }
+            if (ramfs_stat(buffer) == NULL) { printf("No such directory: %s\n", buffer); free(buffer); return EXIT_FAILURE; }
+            int* ents = ramfs_readDir(buffer);
+            if (ents == NULL) { printf("Unable to read directory: %s\n", buffer); return EXIT_FAILURE; }
+            for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT && ents[i] != RAMFS_DIRENTEND; ++i) {
+                ramfs_Entry_t* ent = ramfs_dirent(ents[i]);
+                if (
+                    ent->name && compare(ent->name, buffer) == 0 ||
+                    split(ent->name, '/').c > split(buffer, '/').c + 1
+                ) { continue; }
+                if (ent) { printf("%s\n", &ent->name[length(buffer)]); }
+            } free(buffer); return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "cat") == 0) {
+            if (arg.c < 2) { printf("Too few arguments\n"); return EXIT_USAGE_ERROR; }
+            if (arg.v[1][0] == '/') {
+                if (ramfs_stat(arg.v[1]) == NULL || ramfs_stat(arg.v[1])->type != RAMFS_TYPE_FILE)
+                    { printf("No such file: %s\n", arg.v[1]); return EXIT_FAILURE; }
+                char* data = ramfs_readFile(arg.v[1]);
+                for (int i = 0; i < ramfs_stat(arg.v[1])->size; ++i) { if (data[i] != '\0') { putchar(data[i]); } }
+                putchar('\n'); return EXIT_SUCCESS;
+            } else {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s", kernel_WorkingPath, arg.v[1]);
+                if (ramfs_stat(buffer) == NULL || ramfs_stat(buffer)->type != RAMFS_TYPE_FILE)
+                    { printf("No such file: %s\n", arg.v[1]); return EXIT_FAILURE; }
+                char* data = ramfs_readFile(buffer);
+                for (int i = 0; i < ramfs_stat(buffer)->size; ++i) { if (data[i] != '\0') { putchar(data[i]); } }
+                putchar('\n'); free(buffer); return EXIT_SUCCESS;
+            }
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "mkdir") == 0) {
+            if (arg.c < 2) { printf("Too few arguments\n"); return EXIT_USAGE_ERROR; }
+            for (int i = 1; i < arg.c; ++i) {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                if (arg.v[i][0] == '/') { copy(arg.v[i], buffer); } else {
+                    snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s/", kernel_WorkingPath, arg.v[i]);
+                }
+                if (ramfs_stat(buffer) == NULL) {
+                    if (ramfs_createDir(buffer) != RAMFS_STATUS_SUCCESS) { printf("Unable to make: %s\n", buffer); }
+                } else { printf("Already exists: %s\n", buffer); } free(buffer);
+            } return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "touch") == 0) {
+            if (arg.c < 2) { printf("Too few arguments\n"); return EXIT_USAGE_ERROR; }
+            for (int i = 1; i < arg.c; ++i) {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                if (arg.v[i][0] == '/') { copy(arg.v[i], buffer); } else {
+                    snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s", kernel_WorkingPath, arg.v[i]);
+                }
+                if (ramfs_stat(buffer) != NULL) {
+                    ramfs_stat(buffer)->mtime = date();
+                    ramfs_stat(buffer)->atime = date();
+                } else {
+                    if (ramfs_writeFile(buffer, 1, " ") != RAMFS_STATUS_SUCCESS) {
+                        printf("Unable to write %s\n", buffer);
+                    } free(buffer);
+                }
+            } return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "rmdir") == 0) {
+            if (arg.c < 2) { printf("Too few arguments\n"); return EXIT_USAGE_ERROR; }
+            for (int i = 1; i < arg.c; ++i) {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                if (arg.v[i][0] == '/') { copy(arg.v[i], buffer); } else {
+                    snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s/", kernel_WorkingPath, arg.v[i]);
+                }
+                if (ramfs_stat(buffer) != NULL) {
+                    if (ramfs_stat(buffer)->type != RAMFS_TYPE_DIR) { printf("Not a directory: %s\n", buffer); }
+                    bool empty = true;
+                    int* ents = ramfs_readDir(buffer);
+                    if (ents == NULL) { printf("Unable to read directory: %s\n", buffer); return EXIT_FAILURE; }
+                    for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT && ents[i] != RAMFS_DIRENTEND; ++i) {
+                        //
+                    }
+                    if (ramfs_remove(buffer) != RAMFS_STATUS_SUCCESS) { printf("Unable to remove %s\n", buffer); }
+                } else { printf("No such directory: %s\n", buffer); } free(buffer);
+            } return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "rm") == 0) {
+            if (arg.c < 2) { printf("Too few arguments\n"); return EXIT_USAGE_ERROR; }
+            for (int i = 1; i < arg.c; ++i) {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                if (arg.v[i][0] == '/') { copy(arg.v[i], buffer); } else {
+                    snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s", kernel_WorkingPath, arg.v[i]);
+                }
+                if (ramfs_stat(buffer) != NULL) {
+                    if (ramfs_stat(buffer)->type == RAMFS_TYPE_DIR) { printf("It's a directory: %s\n", buffer); }
+                    if (ramfs_remove(buffer) != RAMFS_STATUS_SUCCESS) { printf("Unable to remove %s\n", buffer); }
+                } else { printf("No such file: %s\n", buffer); } free(buffer);
+            } return EXIT_SUCCESS;
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "edit") == 0) {
+            if (arg.c < 2) { return kernel_textEditor(NULL); }
+            if (arg.v[1][0] == '/') {
+                if (ramfs_stat(arg.v[1]) == NULL || ramfs_stat(arg.v[1])->type != RAMFS_TYPE_FILE)
+                    { printf("No such file: %s\n", arg.v[1]); return EXIT_FAILURE; }
+                return kernel_textEditor(arg.v[1]);
+            } else {
+                char* buffer = (char*)malloc(RAMFS_MAX_PATH_LENGTH); if (buffer == NULL) { return EXIT_FAILURE; }
+                snprintf(buffer, RAMFS_MAX_PATH_LENGTH, "%s%s", kernel_WorkingPath, arg.v[1]);
+                if (ramfs_stat(buffer) == NULL || ramfs_stat(buffer)->type != RAMFS_TYPE_FILE)
+                    { printf("No such file: %s\n", arg.v[1]); return EXIT_FAILURE; }
+                return kernel_textEditor(buffer);
+            }
+        } /* --> */ else if (arg.v[0] && compare(arg.v[0], "uname") == 0) {
+            printf("Deputy\n"); return EXIT_SUCCESS;
+        } /* --> */ else {
+            printf("Command %s not found\n", arg.v[0]); return EXIT_COMMAND_NOT_FOUND;
+        }
+    } else { return 0; }
+}
+
+// Main function of kernel
 void kernel_main(void) {
     puts("Welcome!\n");     // Print welcome message for user
     putchar('\n');
@@ -306,7 +433,7 @@ void kernel_main(void) {
         char* my_data = (char*)malloc(9*1024);
         if (my_data == NULL) { kernel_panic("Memory test error: Allocated memory is null"); }
         printf("Allocated a memory block.\n");
-        // strcpy(my_data, "Hello, World!");
+        // copy(my_data, "Hello, World!");
         snprintf(my_data, MEMORY_BLOCKSIZE, "Hello, %s!", "World");
         printf("Writed data to allocated memory block.\n");
         printf("My data: %s\n", my_data);
@@ -318,260 +445,197 @@ void kernel_main(void) {
         putchar('\n');
     }
 
-    // * Disk driver test
-    if (false) {
-        puts("---- Disk test started ----\n");
-        if (disk_support()) {
-            char* my_data = (char*)malloc(DISK_SECTOR_SIZE);
-            printf("Allocated a memory buffer.\n");
-            snprintf(my_data, DISK_SECTOR_SIZE, "Hello, %s!", "world");
-            printf("Writed data to allocated memory buffer.\n");
-            if (disk_writeSector(0, my_data) == -1) {
-                kernel_panic("Disk test error: Disk writing sector failed");
-            }
-            printf("Writed allocated memory buffer to disk's first sector.\n");
-            memset(my_data, 0, DISK_SECTOR_SIZE);
-            snprintf(my_data, DISK_SECTOR_SIZE, "Hi, %s!", "Serif");
-            printf("Writed data to allocated memory buffer.\n");
-            if (disk_writeSector(1, my_data) == -1) {
-                kernel_panic("Disk test error: Disk writing sector failed");
-            }
-            printf("Writed allocated memory buffer to disk's second sector.\n");
-            memset(my_data, 0, DISK_SECTOR_SIZE);
-            printf("Allocated memory buffer cleaned\n");
-            if (disk_readSector(0, my_data) == -1) {
-                kernel_panic("Disk test error: Disk reading sector failed");
-            }
-            printf("Readed data from disk's first sector: %s\n", my_data);
-            if (disk_readSector(1, my_data) == -1) {
-                kernel_panic("Disk test error: Disk reading sector failed");
-            }
-            printf("Readed data from disk's second sector: %s\n", my_data);
-            free(my_data);
-            printf("Allocated memory buffer freed.\n");
-        } else { puts("Disk test failed: Device does not support ATA disk controller.\n"); }
-        puts("---- Disk test ended ----\n");
-        putchar('\n');
-    }
-
     // * File system test
     if (false) {
         puts("---- File system test started ----\n");
-        printf("Requested to create a directory (code: %d)\n", ramfs_createDir("docs"));
-        test_listastree();
-        // sleep(3);
-        printf("Requested to create a directory (code: %d)\n", ramfs_createDir("docs"));
-        test_listastree();
-        // sleep(3);
-        printf("Requested to write a file (code: %d)\n", ramfs_writeFile("docs", "readme.txt", "Hello, world!", MEMORY_BLOCKSIZE));
-        test_listastree();
-        printf("Printing content of /docs/readme.txt: %s\n", ramfs_readFile("docs", "readme.txt"));
-        // sleep(3);
-        printf("Requested to write a file (code: %d)\n", ramfs_writeFile("docs", "readme.txt", "How are you?", MEMORY_BLOCKSIZE));
-        test_listastree();
-        printf("Printing content of /docs/readme.txt: %s\n", ramfs_readFile("docs", "readme.txt"));
-        // sleep(3);
-        printf("Requested to remove a file (code: %d)\n", ramfs_removeFile("docs", "readme.txt"));
-        test_listastree();
-        printf("Finding removed file (code %d)\n", ramfs_getFileIndex("docs", "readme.txt"));
-        // sleep(3);
-        printf("Requested to remove a removed file (code: %d)\n", ramfs_removeFile("docs", "readme.txt"));
-        test_listastree();
-        // sleep(3);
-        printf("Requested to remove a directory (code: %d)\n", ramfs_removeDir("docs"));
-        test_listastree();
-        printf("Finding removed directory (code %d)\n", ramfs_getDirIndex("docs"));
-        // sleep(3);
-        printf("Requested to remove a removed directory (code: %d)\n", ramfs_removeDir("docs"));
-        test_listastree();
-        // sleep(3);
+        int status;
+        status = ramfs_createDir("/home/");
+        printf("Create /home/: %d\n", status); // !
+        status = ramfs_createDir("/home/user/");
+        printf("Create /home/user/: %d\n", status); // !
+        char* content = "Hello, world!";
+        status = ramfs_writeFile("/home/user/test.txt", 15, content);
+        printf("Write /home/user/test.txt: %d\n", status); // !
+        char* data = ramfs_readFile("/home/user/test.txt");
+        if (data) {
+            printf("Read /home/user/test.txt: %s\n", data);
+        } else {
+            printf("Read /home/user/test.txt: FAILED\n");
+        } // !
+        int* entries = ramfs_readDir("/home/user/");
+        if (entries) {
+            printf("Entries under /home/user/:\n");
+            for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT && entries[i] != 0; ++i) {
+                ramfs_Entry_t* ent = ramfs_dirent(entries[i]);
+                if (ent) {
+                    printf(" - %s (%d)\n", ent->name, ent->type);
+                }
+            }
+        } else {
+            printf("ReadDir /home/user/: FAILED\n");
+        } // !
+        status = ramfs_remove("/home/user/test.txt");
+        printf("Remove /home/user/test.txt: %d\n", status); // !
+        data = ramfs_readFile("/home/user/test.txt");
+        if (data) {
+            printf("Unexpected Read: %s\n", data);
+        } else {
+            printf("Read deleted file: Correctly failed\n");
+        } // !
+        status = ramfs_remove("/home/");
+        printf("Try remove /home/: %d\n", status); // !
+        status = ramfs_remove("/home/user/");
+        printf("Remove /home/user/: %d\n", status); // !
+        status = ramfs_remove("/home/");
+        printf("Remove /home/: %d\n", status); // !
+        status = ramfs_remove("/");
+        printf("Remove root (/): %d\n", status); // !
         puts("---- File system test ended ----\n");
         putchar('\n');
     }
 
-    // * System call manager test
-    if (false) {
-        puts("---- System call manager test started ----\n");
-        printf("Adding new system call to first entry (number 1)...");
-        syscall_addEntry(1, (size_t)test_exmfunc);
-        printf(" Success.\n");
-        printf("Calling added system call... (EAX: 1, EBX: 76)\n");
-        asm volatile (
-            "mov $1, %%eax\n\t"
-            "mov $76, %%ebx\n\t"
-            "int $0x80\n\t"
-            :
-            :
-            : "%eax"
-        );
-        int result;
-        asm volatile ("mov %%eax, %0" : "=r"(result) : : "%eax");
-        printf("    Return value (EAX): %d\n", result);
-        printf("Removing added system call (number 1)...");
-        syscall_addEntry(1, 0x00);
-        printf(" Success.\n");
-        puts("---- System call manager test ended ----\n");
-        putchar('\n');
-    }
-
-    if (0) {
-        char mymsg[100];
-        asm volatile (
-            "mov $3, %%eax\n\t"
-            "mov %0, %%ebx\n\t"
-            "mov $10, %%ecx\n\t"
-            "int $0x80\n\t"
-            :
-            : "r"(mymsg)
-            : "%eax", "%ebx", "%ecx"
-        );
-        asm volatile (
-            "mov $4, %%eax\n\t"
-            "mov %0, %%ebx\n\t"
-            "mov %1, %%ecx\n\t"
-            "int $0x80\n\t"
-            :
-            : "r"(mymsg), "r"(strlen(mymsg))
-            : "%eax", "%ebx", "%ecx"
-        );
-    }
-
-    // * Colorful graphic display test
-    if (false) {
-        display_graphic_switch();
-        uint8_t color = 0;
-        while (true) {
-            display_graphic_fillRect(0, 0, 320, 200, color);
-            if (color >= 255) {
-                color = 0;
-            } else { color++; }
-            sleep(1);
-        }
-    }
-
-    // * Bitmap image viewer test
-    if (true) {
-        display_graphic_switch();
-        display_graphic_bmpViewer(snail_bmp);
-    }
-
-    // Loading file system session from disk
-    // puts("Loading file system session from disk...");
-    // if (ramfs_load() == -1) {
-    //     puts("\nAn error occured while loading the file system session from disk.\n");
-    //     kernel_SaveFSSession = false;
-    // } else { kernel_SaveFSSession = true; puts(" Success.\n"); }
-
     // * Built-in kernel shell
     if (true) {
+        fill(kernel_WorkingPath, 0, RAMFS_MAX_PATH_LENGTH); copy(kernel_WorkingPath, "/");
+        if (ramfs_createDir("/system/") != RAMFS_STATUS_SUCCESS) { printf("Unable to create /system/\n"); }
+        if (ramfs_writeFile("/system/hello.txt", length("Hello, world!"), "Hello, world!") != RAMFS_STATUS_SUCCESS)
+            { printf("Unable to write /system/hello.txt\n"); }
+        if (ramfs_createDir("/myfiles/") != RAMFS_STATUS_SUCCESS) { printf("Unable to create /myfiles/\n"); }
+        if (ramfs_createDir("/myfiles/docs/") != RAMFS_STATUS_SUCCESS) { printf("Unable to create /myfiles/docs/\n"); }
+        if (ramfs_writeFile("/welcome.txt", length("Welcome!"), "Welcome!") != RAMFS_STATUS_SUCCESS)
+            { printf("Unable to write /init\n"); }
         puts("Unable to run user shell, switching to built-in kernel shell.\n");
-        ramfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 29", MEMORY_BLOCKSIZE);
-        ramfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 29, booted successfully.", MEMORY_BLOCKSIZE);
-        ramfs_writeFile("system", "readme.txt", "Thanks for using my kernel ;)", MEMORY_BLOCKSIZE);
-        strcpy(path, "/");
-        char* header;
-        while(1) {
-            snprintf(header, RAMFS_MAX_NAME_LENGTH + 3, "%s # ", path);
-            char* prompt = scanf(header);
-            putchar('\n');
-            if (prompt && strcmp(prompt, "exit") == 0) { printf("Process completed\n"); break; }
-            if (kernel_commandHandler(path, prompt) == -1) { /* Handle error */ }
+        while (true) {
+            printf("%s ", kernel_WorkingPath); char* cmd = prompt("# "); putchar('\n');
+            if (split(cmd, ' ').v[0] && compare(split(cmd, ' ').v[0], "exit") == 0)
+                { printf("Process completed\n"); break; }
+            if (kernel_commandHandler(kernel_WorkingPath, cmd) != EXIT_SUCCESS) { /* Handle error */ }
         }
     }
-
-    // Saving file system session to disk
-    // if (kernel_SaveFSSession) {
-    //     puts("Saving file system session to disk...");
-    //     if (ramfs_save() == -1) {
-    //         puts("An error occured while loading the file system session to disk.\n");
-    //     } else { puts(" Success.\n"); }
-    // }
-
-    ramfs_disable();
+    // exit();
 
     kernel_panic("No processes to execute");    // Switch to idle if no process
 }
 
-void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
+// Initialize function of kernel
+void kernel_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
     display_init();     // Initialize display driver
-    display_clear();    // Clear display
-    // Set cursor to bottom-left corner
-    display_putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));  // Set on display
-    putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));          // Set on common libraries
 
-    if (boot_magic != MULTIBOOT_BOOTLOADER_MAGIC) {                 // Check magic number
-        kernel_panic("Invalid multiboot magic number");
+    // * Check multiboot magic number
+    if (boot_magic != MULTIBOOT_BOOTLOADER_MAGIC) { kernel_panic("Invalid multiboot magic number"); }
+
+    // * Check system memory map
+    if (!(boot_info->flags >> 6 & 0x01)) { kernel_panic("Invalid memory map given by bootloader"); }
+
+    // * Detect hardware and identify
+    // Check the kernel base address
+    if (KERNEL_BASE != (size_t)&kernel_start) { kernel_panic("Invalid kernel base address"); }
+    // Calculate kernel size
+    kernel_PhysicalSize = (size_t)&kernel_end - (size_t)&kernel_start;
+    // Get physical memory size from bootloader
+    kernel_MemoryLowerSize = boot_info->mem_lower * 1024;   // Get lower (Below 1MB) memory size
+    kernel_MemoryUpperSize = boot_info->mem_upper * 1024;   // Get upper (Above 1MB) memory size
+    // Get boot device from bootloader
+    if (boot_info->flags & (1 << 4)) {                      // Check boot device flag
+        kernel_BootDevice = boot_info->boot_device;         // Get boot device if boot device flag set
+    } else {
+        kernel_BootDevice = 0;                              // Else set boot device invalid
     }
 
-    if (!(boot_info->flags >> 6 & 0x01)) {                          // Check memory map
-        kernel_panic("Invalid memory map given by bootloader");
-    }
-
-    // Scan for available memory block
-    // Normally, no need that for this kernel but I added it anyway so you can add to your own project.
-    if (0) {    // Do not start
-        puts("---- Scanning Memory ----\n");
-        puts("Scanning for a memory block to use...\n");
-        for (int i = 0; i < boot_info->mmap_length; i += sizeof(multiboot_memory_map_t)) {
-            multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*) (boot_info->mmap_addr + i);
-            printf("Start: 0x%x, Length: 0x%x, Size: 0x%x, Type: %d\n",
-                mmmt->addr, mmmt->len, mmmt->size, mmmt->type);
-            if(mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
-                if (mmmt->addr < 0x100000 && mmmt->size < 1*1024*1024) {
-                    printf("Available memory block found but its too small.\n");
-                } else {
-                    printf("Available memory block found.\n");
-                }
-            } else {
-                printf("Not available.\n");
-            }
-        }
-        puts("---- Scanning Ended ----\n");
-        putchar('\n');
-    }
-
-    // Print information about device and kernel
-    kernel_size = (size_t)&kernel_end - (size_t)&kernel_start;  // Calculate kernel size
-    printf("Kernel Size: %d byte\n", kernel_size);              // Print kernel size
-    printf("Boot device: %d (%s)\n",                            // Print boot device
-        kernel_getBootDevice(), kernel_getBootDeviceStr());
-    printf("Date: %d:%d:%d %d/%d/%d\n",                         // Print date
-        date().hour, date().min, date().sec, date().day, date().mon, date().year);
+    // * Print information about hardware
+    printf("Kernel size: %dMB\n", kernel_size() / 1024 / 1024);     // Print kernel size
+    printf("Memory size: %dMB\n", kernel_memsize() / 1024 / 1024);  // Print physical memory size
+    printf("Boot device: %d (%s)\n",                                // Print kernel boot device
+        kernel_bootdev(), kernel_BootDeviceList[kernel_bootdev()]);
+    printf(
+        "Time and date: %d:%d:%d %d/%d/%d\n",                       // Print date and time
+        date().hour, date().min, date().sec,                        // Print time
+        date().day, date().mon, date().year                         // Print date
+    );
     putchar('\n');
 
-    // Initialize Kernel
+    // * Scan for available memory field
+    puts("---- Scanning Memory ----\n");
+    int fieldFound = false;     // Variable for check available memory field found or not
+    uint64_t fieldSize;         // Variable for get available field size
+    // Check for memory fields
+    for (int i = 0; i < boot_info->mmap_length; i += sizeof(multiboot_memory_map_t)) {
+        // System memory map from bootloader
+        multiboot_memory_map_t* mmmt = (multiboot_memory_map_t*) (boot_info->mmap_addr + i);
+        // Print current memory field
+        printf("0x%x", mmmt->addr); 
+        if (mmmt->len/1024/1024) {
+            printf(", %dMB: ", mmmt->len/1024/1024);
+        } else { printf(", %dKB: ", mmmt->len/1024); }
+        // Check is available for kernel or not
+        if(mmmt->type == MULTIBOOT_MEMORY_AVAILABLE) {
+            if (mmmt->addr != KERNEL_BASE || mmmt->len < kernel_size()) {
+                printf("Available but small\n");    // Available but its small for kernel
+            } else {
+                printf("Available, choosing this field.\n");        // Available
+                fieldSize = mmmt->len; fieldFound = true; break;    // Use this field
+            }
+        } else { printf("Unavailable\n"); }     // Not available for use
+    } if (!fieldFound) { kernel_panic("No available memory fields"); }  // Halt the system if no memory field for use
+    puts("---- Scanning Ended ----\n");
+    putchar('\n');
+
+    // * Initialize kernel
     puts("---- Initializing Kernel ----\n");
-    puts("Initializing Protected Mode..."); gdt_init(); puts(" Success.\n");
+    puts("Initializing Protected Mode..."); protect_init(); puts(" Success.\n");
     puts("Initializing Interrupt Manager..."); interrupts_init(); puts(" Success.\n");
-    puts("Detecting Hardware..."); kernel_initHWDetector(boot_info); puts(" Success.\n");
-    if (!disk_support()) { puts("Warning: Device does not support ATA disk controller, ignoring.\n"); }
-    puts("Initializing Memory Manager..."); memory_init(); puts(" Success.\n");
-    puts("Initializing RAM File System..."); ramfs_init(); puts(" Success.\n");
+    puts("Initializing Memory Manager..."); memory_init(fieldSize - kernel_size()); puts(" Success.\n");
+    puts("Initializing Process Manager..."); process_init(); puts(" Success.\n");
+    puts("Initializing RAM file system..."); ramfs_init(); puts(" Success.\n");
     puts("Initializing System Call Manager..."); syscall_init(); puts(" Success.\n");
-    puts("Initializing Multitasking Manager..."); multitask_init(); puts(" Success.\n");
     puts("---- Initializing Ended ----\n");
     putchar('\n');
+    
+    // * Initialize device files
+    if (ramfs_createDir("/dev/") != RAMFS_STATUS_SUCCESS) { kernel_panic("Unable to create directory /dev/"); }
+    void* zero = malloc(MEMORY_BLOCKSIZE); if (zero == NULL) { kernel_panic("Unable to allocate memory"); }
+    fill(zero, 0, MEMORY_BLOCKSIZE);
+    if (ramfs_writeFile("/dev/keyboard", MEMORY_BLOCKSIZE, zero) != RAMFS_STATUS_SUCCESS)
+        { kernel_panic("Unable to create device /dev/keyboard"); }
+    free(zero);
 
-    puts("Sheriff Kernel Build 29, booted successfully.\n");    // Print kernel boot success message and build version
-    // * Multitasking system test
-    if (false) {
-        printf("%s\n", memory_report());
-        void* task1 = malloc(32*1024);
-        printf("%d\n", (size_t)task1);
-        void* task2 = malloc(32*1024);
-        printf("%d\n", (size_t)task2);
-        void* task3 = malloc(32*1024);
-        printf("%d\n", (size_t)task3);
-        if (task1 == NULL || task2 == NULL || task3 == NULL) { kernel_panic("Memory allocation failed"); }
-        memcpy(task1, test_exmtask1, 32*1024);
-        memcpy(task2, test_exmtask2, 32*1024);
-        memcpy(task3, test_exmtask3, 32*1024);
-        printf("PID: %d\n", spawn(task1, 32*1024));
-        printf("PID: %d\n", spawn(task2, 32*1024));
-        printf("PID: %d\n", spawn(task3, 32*1024));
-        printf("%s\n", memory_report());
-        yield();
-        while(1);
-    }
-    kernel_main();                                              // Switch to kernel main
+    // Print kernel boot success message and build version
+    printf("Deputy Kernel Build %d, booted successfully.\n", KERNEL_BUILD);
+    
+    // spawn("kernel_main", kernel_main);
+    // spawn("test1", test1);
+    // spawn("test2", test2);
+    // spawn("test3", test3);
+    // yield();
+    // asm volatile ("jmp *%0" : : "r"((void*)0xFFFFFFFFFFFFFC18));
+
+    // char* progname = "test";
+    // printf("0x%x\n", (size_t)&&label);
+    // label:
+    // asm volatile (
+    //     "mov $2, %%eax\t\n"
+    //     "mov %0, %%ebx\t\n"
+    //     "mov %1, %%ecx\t\n"
+    //     "int $0x80"
+    //     :
+    //     : "r"(progname), "r"(test)
+    //     : "eax", "ebx", "ecx"
+    // ); yield();
+    // write(STDOUT, "Merhaba, dunya!\n", length("Merhaba, dunya!\n"));
+    // asm volatile (
+    //     "mov $4, %%eax\t\n"
+    //     "mov $1, %%ebx\t\n"
+    //     "mov %0, %%ecx\t\n"
+    //     "mov %1, %%edx\t\n"
+    //     "int $0x80"
+    //     :
+    //     : "r"("Nasilsiniz?\n"), "r"(length("Nasilsiniz?\n"))
+    //     : "eax", "ebx", "ecx", "edx"
+    // );
+
+    spawn("testshell", testshell);
+    spawn("keyboard_process", keyboard_process);
+    yield();
+
+    kernel_main();  // Switch to kernel main
 }

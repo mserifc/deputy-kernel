@@ -1,25 +1,15 @@
 #include "drivers/keyboard.h"
+#include "filesystem/ramfs.h"
 
-// Key state buffer
-bool keyboard_KeyState[0x59];
-
-// Shift state
-bool keyboard_ShiftState = false;
-
-// Initialize state
-bool keyboard_InitState = false;
-
-bool keyboard_ScanState = false;
-
-// US Keyboard Layout
-const uint8_t keyboard_Layout[128][2] = {
- // { X  ,  X },       Shift off    | Shift On      | Code
+// United States keyboard layout
+const char keyboard_Layout_US[128][2] = {
+//  { x  ,  X },       Shift off    | Shift On      | Code
     { 0  ,  0 },    // Unknown      | Unknown       | 0x00
     
-    {0x01,  0 },    // Escape       | None          | 0x01
+    { 0  ,  0 },    // Escape       | None          | 0x01
     {'1' , '!'},    // Number 1     | Exclamation   | 0x02
     {'2' , '@'},    // Number 2     | At Sign       | 0x03
-    {'3' , '#'},    // Number 3     | Pound Sign    | 0x04
+    {'3' , '#'},    // Number 3     | Hash Sign     | 0x04
     {'4' , '$'},    // Number 4     | Dollar Sign   | 0x05
     {'5' , '%'},    // Number 5     | Percent Sign  | 0x06
     {'6' , '^'},    // Number 6     | Caret         | 0x07
@@ -46,7 +36,7 @@ const uint8_t keyboard_Layout[128][2] = {
     {']' , '}'},    // R Bracket    | R Brace       | 0x1B
     {'\n','\n'},    // Enter        | Enter         | 0x1C
 
-    {0x1D,  0 },    // L Control    | None          | 0x1D
+    { 0  ,  0 },    // L Control    | None          | 0x1D
     {'a' , 'A'},    // Lowercase a  | Uppercase A   | 0x1E
     {'s' , 'S'},    // Lowercase s  | Uppercase S   | 0x1F
     {'d' , 'D'},    // Lowercase d  | Uppercase D   | 0x20
@@ -58,8 +48,8 @@ const uint8_t keyboard_Layout[128][2] = {
     {'l' , 'L'},    // Lowercase l  | Uppercase L   | 0x26
     {';' , ':'},    // Semicolon    | Colon         | 0x27
     {'\'', '"'},    // Quote        | Double Quote  | 0x28
-    {'`' , '`'},    // Backtick     | Tilde         | 0x29
-    {0x2A,0x2A},    // L Shift      | L Shift       | 0x2A
+    {'`' , '~'},    // Backtick     | Tilde         | 0x29
+    { 0  ,  0 },    // L Shift      | L Shift       | 0x2A
 
     {'\\', '|'},    // Backslash    | Pipe          | 0x2B
     {'z' , 'Z'},    // Lowercase z  | Uppercase Z   | 0x2C
@@ -72,25 +62,25 @@ const uint8_t keyboard_Layout[128][2] = {
     {',' , '<'},    // Comma        | Less Than     | 0x33
     {'.' , '>'},    // Dot          | Greater Than  | 0x34
     {'/' , '?'},    // Slash        | Question Mark | 0x35
-    {0x36,0x36},    // R Shift      | R Shift       | 0x36
+    { 0  ,  0 },    // R Shift      | R Shift       | 0x36
     {'*' , '*'},    // Asterisk     | None          | 0x37
-    {0x38,  0 },    // L Alt        | None          | 0x38
+    { 0  ,  0 },    // L Alt        | None          | 0x38
     {' ' , ' '},    // Spacebar     | Spacebar      | 0x39
-    {0x3A,0x3A},    // Caps Lock    | Caps Lock     | 0x3A
+    { 0  ,  0 },    // Caps Lock    | Caps Lock     | 0x3A
 
-    {0x3B,  0 },    // F1 Key       | None          | 0x3B
-    {0x3C,  0 },    // F2 Key       | None          | 0x3C
-    {0x3D,  0 },    // F3 Key       | None          | 0x3D
-    {0x3E,  0 },    // F4 Key       | None          | 0x3E
-    {0x3F,  0 },    // F5 Key       | None          | 0x3F
-    {0x40,  0 },    // F6 Key       | None          | 0x40
-    {0x41,  0 },    // F7 Key       | None          | 0x41
-    {0x42,  0 },    // F8 Key       | None          | 0x42
-    {0x43,  0 },    // F9 Key       | None          | 0x43
-    {0x44,  0 },    // F10 Key      | None          | 0x44
+    { 0  ,  0 },    // F1 Key       | None          | 0x3B
+    { 0  ,  0 },    // F2 Key       | None          | 0x3C
+    { 0  ,  0 },    // F3 Key       | None          | 0x3D
+    { 0  ,  0 },    // F4 Key       | None          | 0x3E
+    { 0  ,  0 },    // F5 Key       | None          | 0x3F
+    { 0  ,  0 },    // F6 Key       | None          | 0x40
+    { 0  ,  0 },    // F7 Key       | None          | 0x41
+    { 0  ,  0 },    // F8 Key       | None          | 0x42
+    { 0  ,  0 },    // F9 Key       | None          | 0x43
+    { 0  ,  0 },    // F10 Key      | None          | 0x44
 
-    {0x45,  0 },    // Number Lock  | None          | 0x45
-    {0x46,  0 },    // Scroll Lock  | None          | 0x46
+    { 0  ,  0 },    // Number Lock  | None          | 0x45
+    { 0  ,  0 },    // Scroll Lock  | None          | 0x46
     {'7' , '7'},    // KP Number 7  | KP Number 7   | 0x47
     {'8' , '8'},    // KP Number 8  | KP Number 8   | 0x48
     {'9' , '9'},    // KP Number 9  | KP Number 9   | 0x49
@@ -109,54 +99,113 @@ const uint8_t keyboard_Layout[128][2] = {
     { 0  ,  0 },    // Unknown      | Unknown       | 0x55
     { 0  ,  0 },    // Unknown      | Unknown       | 0x56
 
-    {0x57,  0 },    // F11 Key      | Unknown       | 0x57
-    {0x58,  0 },    // F12 Key      | Unknown       | 0x58
+    { 0  ,  0 },    // F11 Key      | Unknown       | 0x57
+    { 0  ,  0 },    // F12 Key      | Unknown       | 0x58
 };
 
-void keyboard_handler(void) { keyboard_ScanState = true; }
+// Keyboard key states
+bool keyboard_KeyState[256];
 
-// Function for read key from keyboard
-char keyboard_scankey() {
-    if (!keyboard_InitState) {
-        interrupts_IDTSetGate(INTERRUPTS_PIC_MASTER_OFFSET+INTERRUPTS_IRQ_KEYBOARD, (size_t)keyboard_handler);
-        interrupts_PICIRQEnable(INTERRUPTS_IRQ_KEYBOARD);
-        keyboard_InitState = true;
-    }
-    asm volatile ("sti");
-    uint8_t key, gate;
-    asm volatile ("hlt");
-    gate = true;
-    key = port_inb(KEYBOARD_PORT);
-    if (keyboard_ScanState == false) { return 0; } else {
-        keyboard_ScanState = false;
+/**
+ * @brief Function for convert keycode to character
+ * 
+ * @param key Keycode
+ * 
+ * @return Character
+ */
+char keyboard_tochar(key_t key) {
+    if (((key & 0xFF00) >> 8) == KEYBOARD_KEY_SPECIAL) { return 0; }
+    bool shift = false;
+    if (
+        keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] ||
+        keyboard_KeyState[KEYBOARD_KEY_LSHIFT] ||
+        keyboard_KeyState[KEYBOARD_KEY_RSHIFT]
+    ) { shift = true; }
+    uint8_t chr = (uint8_t)(key & 0xFF);
+    return (char)keyboard_Layout_US[chr][shift];
+}
+
+/**
+ * @brief Function for wait for a key input from keyboard
+ * 
+ * @return Entered keycode
+ */
+key_t keyboard_waitkey() {
+    uint16_t result = 0x0000;
+    waitforkey:
+    while (!(port_inb(KEYBOARD_STATUSPORT) & 1));
+    uint8_t key = port_inb(KEYBOARD_DATAPORT);
+    if (key == KEYBOARD_KEY_SPECIAL) {
+        key = port_inb(KEYBOARD_DATAPORT);
+        if (
+            key >= KEYBOARD_KEY_SP_MM_PREVIOUS + KEYBOARD_KEY_RELEASE &&
+            key <= KEYBOARD_KEY_SP_MM_MEDIASELECT + KEYBOARD_KEY_RELEASE
+        ) { goto waitforkey; }
+        result = ((uint16_t)KEYBOARD_KEY_SPECIAL << 8) | key;
+        return result;
     }
     if (key == KEYBOARD_KEY_CAPSLOCK) {
-        if (keyboard_ShiftState) {
+        if (keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK]) {
             keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] = false;
-            keyboard_ShiftState = false;
         } else {
             keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] = true;
-            keyboard_ShiftState = true;
         }
+        goto waitforkey;
+    }
+    if (key == KEYBOARD_KEY_LSHIFT) {
+        keyboard_KeyState[KEYBOARD_KEY_LSHIFT] = true;
+        goto waitforkey;
+    } else if (key == KEYBOARD_KEY_LSHIFT + KEYBOARD_KEY_RELEASE) {
+        keyboard_KeyState[KEYBOARD_KEY_LSHIFT] = false;
+        goto waitforkey;
+    }
+    if (key == KEYBOARD_KEY_RSHIFT) {
+        keyboard_KeyState[KEYBOARD_KEY_RSHIFT] = true;
+        goto waitforkey;
+    } else if (key == KEYBOARD_KEY_RSHIFT + KEYBOARD_KEY_RELEASE) {
+        keyboard_KeyState[KEYBOARD_KEY_RSHIFT] = false;
+        goto waitforkey;
     }
     if (
-        key == KEYBOARD_KEY_LEFT_SHIFT ||
-        key == KEYBOARD_KEY_RIGHT_SHIFT
-    ) {
-        if (!keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK]) {
-            keyboard_ShiftState = true;
-        } else {}
-    } else if (
-        key == KEYBOARD_KEY_LEFT_SHIFT + 0x80 ||
-        key == KEYBOARD_KEY_RIGHT_SHIFT + 0x80
-    ) {
-        if (!keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK]) {
-            keyboard_ShiftState = false;
-        } else {}
+        key >= KEYBOARD_KEY_ESCAPE + KEYBOARD_KEY_RELEASE &&
+        key <= KEYBOARD_KEY_F12 + KEYBOARD_KEY_RELEASE
+    ) { goto waitforkey; }
+    result = (uint16_t)(key & 0x00FF);
+    return result;
+}
+
+/**
+ * @brief Function for wait for a character input from keyboard
+ * 
+ * @return Entered character input
+ */
+char keyboard_waitchar() {
+    uint16_t input = keyboard_waitkey();
+    if (((input & 0xFF00) >> 8) == KEYBOARD_KEY_SPECIAL) { return 0; }
+    bool shift = false;
+    if (
+        keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] ||
+        keyboard_KeyState[KEYBOARD_KEY_LSHIFT] ||
+        keyboard_KeyState[KEYBOARD_KEY_RSHIFT]
+    ) { shift = true; }
+    uint8_t key = (uint8_t)(input & 0xFF);
+    return (char)keyboard_Layout_US[key][shift];
+}
+
+/**
+ * @brief Main function of PS/2 keyboard controller process for handle key inputs
+ */
+void keyboard_process() {
+    uint8_t* chardev = ramfs_readFile("/dev/keyboard");
+    if (chardev == NULL) { kernel_panic("Unable to read device '/dev/keyboard'"); }
+    uint32_t* bufsize = (uint32_t*)chardev;
+    while (true) {
+        if (port_inb(KEYBOARD_STATUSPORT) & 1) {
+            if (bufsize[0] < MEMORY_BLOCKSIZE - sizeof(uint32_t)) {
+                uint8_t data = port_inb(KEYBOARD_DATAPORT);
+                chardev[sizeof(uint32_t) + bufsize[0]] = data;
+                ++bufsize[0];
+            }
+        } else { yield(); }
     }
-    if (gate) {
-        if (key < 0x80) {
-            return (char)keyboard_Layout[key][keyboard_ShiftState];
-        } else { return 0; }
-    } else { return 0; }
 }

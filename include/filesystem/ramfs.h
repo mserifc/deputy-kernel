@@ -2,53 +2,66 @@
 
 #include "types.h"
 #include "kernel.h"
-#include "common.h"
+#include "utils.h"
 
-// Constants
+// * Constants
 
-#define RAMFS_ROOTAREA_SIZE (256 * 1024)    // Define root directory size
+#define RAMFS_MAX_USERNAME_LENGTH   31          // Maximum username length
+#define RAMFS_MAX_PATH_LENGTH       3839        // Maximum path length
+#define RAMFS_MAX_NAME_LENGTH       255         // Maximum entry name length
+#define RAMFS_MAX_ENTRY_COUNT       16384       // Maximum entry count
 
-#define RAMFS_MAX_NAME_LENGTH 28            // Define max name length for files and directories
-#define RAMFS_MAX_FILE_COUNT 128            // Define max file capacity for directories
-#define RAMFS_MAX_DIR_COUNT 63              // Define max directory capacity for root directory
+#define RAMFS_TYPE_FILE             0           // File type in file system
+#define RAMFS_TYPE_HARDLINK         1           // Hard link type in file system
+#define RAMFS_TYPE_SYMLINK          2           // Symbolic link type in file system
+#define RAMFS_TYPE_CHARDEV          3           // Character device type in file system
+#define RAMFS_TYPE_BLKDEV           4           // Block device type in file system
+#define RAMFS_TYPE_DIR              5           // Directory type in file system
+#define RAMFS_TYPE_FIFO             6           // Named pipe (FIFO) type in file system
 
-// File structure
-struct ramfs_File {
-    char name[RAMFS_MAX_NAME_LENGTH];   // File name
-    char* data;                         // Data field pointer
-};
+#define RAMFS_ROOTDIR               0           // Index of root directory
 
-// Directory structure
-struct ramfs_Directory {
-    char name[RAMFS_MAX_NAME_LENGTH];               // Directory name
-    uint32_t file_count;                            // File count
-    struct ramfs_File file[RAMFS_MAX_FILE_COUNT];   // File array
-};
+#define RAMFS_DIRENTEND             -1          // End of directory entries
 
-// Root directory structure
-struct ramfs_Root {
-    uint32_t dir_count;                                 // Directory count
-    struct ramfs_Directory dir[RAMFS_MAX_DIR_COUNT];    // Directory array
-};
+#define RAMFS_STATUS_SUCCESS        0           // File system operation success
+#define RAMFS_STATUS_FAILURE        -1          // File system operation failure
+#define RAMFS_STATUS_NOTINIT        -2          // File system not initialized
+#define RAMFS_STATUS_ALREADYEXISTS  -3          // File/directory already exists
+#define RAMFS_STATUS_OUTOFMEMORY    -4          // Out of memory
+#define RAMFS_STATUS_PATHNOTFOUND   -5          // Path not found
+#define RAMFS_STATUS_NOTDIR         -6          // Not an directory
+#define RAMFS_STATUS_NOTFILE        -7          // Not an file
+#define RAMFS_STATUS_ENTRYNOTFOUND  -8          // File/directory not found
+#define RAMFS_STATUS_DIRNOTEMPTY    -9          // Directory not empty
+#define RAMFS_STATUS_FILEEXISTS     -10         // File name exists
+#define RAMFS_STATUS_DIREXISTS      -11         // Directory name exists
 
-// Function prototypes
+// * Structures
 
-int ramfs_init();       // Function for initialize RAM file system
-int ramfs_disable();    // Function for disable RAM file system
+// Structure of RAM file system entry
+typedef struct {
+    char name[RAMFS_MAX_PATH_LENGTH + 1];           // Name of entry
+    char user[RAMFS_MAX_USERNAME_LENGTH + 1];       // Owner username
+    char group[RAMFS_MAX_USERNAME_LENGTH + 1];      // Owner group
+    size_t size;                                    // Size of entry
+    date_t ctime;                                   // Create time
+    date_t mtime;                                   // Modify time
+    date_t atime;                                   // Access time
+    uint16_t perm;                                  // Permissions
+    uint8_t type;                                   // Type of entry
+} ramfs_Entry_t;
 
-// Function for get root directory
-struct ramfs_Root* ramfs_getRoot();
+// * Public functions
 
-struct ramfs_Directory* ramfs_getDir(char* dirname);                // Function for get specific directory
-struct ramfs_File* ramfs_getFile(char* dirname, char* filename);    // Function for get specific file
+int             ramfs_init();                                               // Initialize RAM file system
 
-int ramfs_getDirIndex(char* dirname);                       // Function for get specific directory index in root directory
-int ramfs_getFileIndex(char* dirname, char* filename);      // Function for get specific file index in specific directory
+ramfs_Entry_t*  ramfs_stat(char* path);                                     // Get specific entry stats
+ramfs_Entry_t*  ramfs_dirent(int entry);                                    // Get directory entries
 
-struct ramfs_File* ramfs_readDir(char* dirname);    // Function for read directory
-int ramfs_createDir(char* dirname);                 // Function for create a directory
-int ramfs_removeDir(char* dirname);                 // Function for remove a directory
+int*            ramfs_readDir(char* path);                                  // Read specific directory
+int             ramfs_createDir(char* path);                                // Create a directory
 
-char* ramfs_readFile(char* dirname, char* filename);                            // Function for read a file
-int ramfs_writeFile(char* dirname, char* filename, char* data, size_t size);    // Function for write a file
-int ramfs_removeFile(char* dirname, char* filename);                            // Function for remove a file
+char*           ramfs_readFile(char* path);                                 // Read specific file
+int             ramfs_writeFile(char* path, size_t size, char* buffer);     // Write a file
+
+int             ramfs_remove(char* path);                                   // Remove a file/directory

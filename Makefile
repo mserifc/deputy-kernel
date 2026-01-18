@@ -1,13 +1,11 @@
-# C Compiler
+# Compiler
 CC = i386-elf-gcc
 # Assembler
 AS = i386-elf-as
 # Linker
 LD = i386-elf-ld
-# Tools C Compiler
-TOOLS_CC = g++
 
-# C Compiler Flags
+# Compiler flags
 CC_FLAGS = \
 	-m32 \
 	-nostdlib \
@@ -16,98 +14,75 @@ CC_FLAGS = \
 	-fno-exceptions \
 	-fno-leading-underscore \
 	-I include
-# Assembler Flags
+# 	-mno-80387
+# Assembler flags
 AS_FLAGS = --32
-# Linker Flags
+# Linker flags
 LD_FLAGS = -m elf_i386
-# Tools C Compiler Flags
-TOOLS_CC_FLAGS = -std=c++17
 
-# Source Directory
-SOURCE_DIR = kernel
-# Build Directory
+# Build directory
 BUILD_DIR = build
-# Tools Directory
-TOOLS_DIR = tools
+# Kernel source directory
+KERNEL_DIR = kernel
 
-# Kernel
+# The resulting executable kernel
 KERNEL = $(BUILD_DIR)/kernel.elf
+# Linker script
+LINKER = linker.ld
 # Objects
 OBJECTS = \
 	$(BUILD_DIR)/entry.o \
 	$(BUILD_DIR)/kernel.o \
-	$(BUILD_DIR)/common.o \
+	$(BUILD_DIR)/utils.o \
 	$(BUILD_DIR)/memory.o \
+	$(BUILD_DIR)/process.o \
+	$(BUILD_DIR)/syscall.o \
+	$(BUILD_DIR)/iocall.o \
 	\
-	$(BUILD_DIR)/platform/i386/port.o \
-	$(BUILD_DIR)/platform/i386/gdt_flush.o \
-	$(BUILD_DIR)/platform/i386/gdt_init.o \
-	$(BUILD_DIR)/platform/i386/interrupts.o \
-	$(BUILD_DIR)/platform/i386/interrupt_stubs.o \
+	$(BUILD_DIR)/hardware/port.o \
+	$(BUILD_DIR)/hardware/protect_flush.o \
+	$(BUILD_DIR)/hardware/protect_init.o \
+	$(BUILD_DIR)/hardware/interrupts.o \
+	$(BUILD_DIR)/hardware/interrupt_stubs.o \
 	\
 	$(BUILD_DIR)/drivers/display.o \
-	$(BUILD_DIR)/drivers/graphic.o \
 	$(BUILD_DIR)/drivers/keyboard.o \
-	$(BUILD_DIR)/drivers/disk.o \
 	\
-	$(BUILD_DIR)/filesystem/ownfs.o \
-	$(BUILD_DIR)/filesystem/ramfs.o \
-	\
-	$(BUILD_DIR)/sysapi/syscall.o \
-	$(BUILD_DIR)/sysapi/stdio.o \
-	\
-	$(BUILD_DIR)/multitask.o
-# Tools
-TOOLS = $(TOOLS_DIR)/fsbridge
+	$(BUILD_DIR)/filesystem/ramfs.o
 
 # Emulator
 EMULATOR = qemu-system-i386
-# Emulator Flags
-EMULATOR_FLAGS = \
-	-drive file=$(BUILD_DIR)/disk.img,format=raw,if=ide \
-	-rtc base=localtime \
-	-monitor stdio
-# -d int -serial stdio
+# Emulator flags
+EMULATOR_FLAGS = -monitor stdio
 
-# Make Kernel
+# Build the kernel
 all: $(KERNEL)
 
-# Make Build Directory
+# Create build directory
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Compile C Code Files
-$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
+# Compile C files
+$(BUILD_DIR)/%.o: $(KERNEL_DIR)/%.c | $(BUILD_DIR)
 	mkdir -p $(@D)
 	$(CC) $(CC_FLAGS) -c $< -o $@
 
-# Assemble Assembly Files
-$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.s | $(BUILD_DIR)
+# Assemble assembly files
+$(BUILD_DIR)/%.o: $(KERNEL_DIR)/%.s | $(BUILD_DIR)
 	mkdir -p $(@D)
 	$(AS) $(AS_FLAGS) $< -o $@
 
-# Link Objects
-$(KERNEL): linker.ld $(OBJECTS)
-	$(LD) $(LD_FLAGS) -T linker.ld -o $@ $(OBJECTS)
+# Link objects and create the kernel
+$(KERNEL): $(LINKER) $(OBJECTS)
+	$(LD) $(LD_FLAGS) -T $(LINKER) -o $@ $(OBJECTS)
 
-# Make tools
-tools: $(TOOLS)
-
-# Compile tools source codes
-$(TOOLS_DIR)/%: $(TOOLS_DIR)/%.cpp
-	$(TOOLS_CC) $(TOOLS_CC_FLAGS) $< -o $@
-
-disk: $(TOOLS_DIR)/fsbridge
-	dd if=/dev/zero of=$(BUILD_DIR)/disk.img bs=512 count=65536
-	$(TOOLS_DIR)/fsbridge -s $(BUILD_DIR)/disk.img disk
-
-# Run with Emulator
-run: $(KERNEL) $(BUILD_DIR)/disk.img
+# Run the kernel with emulator
+run: $(KERNEL)
 	$(EMULATOR) $(EMULATOR_FLAGS) -kernel $(KERNEL)
 
 # Clean up
 clean:
 	rm -f $(OBJECTS) $(KERNEL)
 
-# Mark 'all', 'run', and 'clean' as non-file targets.
-.PHONY: all tools disk run clean
+# Mark 'all', 'run', and 'clean' as non-file targets
+.PHONY: all run clean

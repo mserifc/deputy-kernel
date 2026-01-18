@@ -1,40 +1,36 @@
-ENTRY(kernel_entry)
-OUTPUT_FORMAT(elf32-i386)
-OUTPUT_ARCH(i386:i386)
+ENTRY(kernel_entry)             /* Set entry of the kernel */
+OUTPUT_FORMAT(elf32-i386)       /* Build the kernel as 32-bit ELF format */
+OUTPUT_ARCH(i386:i386)          /* For 32-bit x86 architecture machines */
 
 SECTIONS
 {
-    . = 0x100000;
-    kernel_start = .;
+    . = 0x100000;               /* Base address of the kernel in physical memory */
+    kernel_start = .;           /* Kernel start address */
 
-    .text :
+    .text :                     /* Text section */
     {
-        *(.multiboot)
-        *(.text*)
-        *(.rodata)
+        *(.multiboot)           /* Multiboot information */
+        *(.text*)               /* All text sections */
+        *(.rodata)              /* Read-only data */
     }
 
-    .data :
+    .data :                     /* Data section */
     {
-        start_ctors = .;
-        KEEP(*( .init_array ));
-        KEEP(*(SORT_BY_INIT_PRIORITY( .init_array.* )));
-        end_ctors = .;
-
-        *(.data)
+        *(.data)                /* Data segment (variables) */
     }
 
-    .bss :
+    .bss :                      /* BSS section */
     {
-        *(.bss)
+        *(.bss)                 /* Uninitialized data */
+        *(COMMON)               /* Common data (Uninitialized global variables) */
     }
 
-    /DISCARD/ :
+    /DISCARD/ :                 /* Ignored sections */
     {
-        *(.fini_array*)
-        *(.comment)
+        *(.fini_array*)         /* Termination functions */
+        *(.comment)             /* Comments */
     }
 
-    . = ALIGN(8);
-    kernel_end = .;
+    . = ALIGN(4);               /* Memory alignment */
+    kernel_end = .;             /* Kernel end address */
 }

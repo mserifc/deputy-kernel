@@ -1,16 +1,49 @@
 #pragma once
 
-#include "multiboot.h"
 #include "types.h"
-#include "common.h"
-#include "platform/i386/port.h"
-#include "platform/i386/interrupts.h"
-#include "sysapi/syscall.h"
+#include "utils.h"
+#include "debug.h"
 
-// Kernel entry memory address
-#define KERNEL_ENTRY 0x100000
+// Kernel code start and end (Set in linker.ld)
+extern char kernel_start, kernel_end;
 
-// Macro for handling Kernel Panic Situations
+// Constants
+
+#define KERNEL_BASE                 0x100000    // Kernel base address
+#define KERNEL_BUILD                30          // Kernel build version
+
+#define KERNEL_BOOTDEVICE_INVALID   0x00        // Invalid boot device
+#define KERNEL_BOOTDEVICE_HARDDISK  0x01        // Harddisk boot device
+#define KERNEL_BOOTDEVICE_FLOPPY    0x02        // Floppy boot device
+#define KERNEL_BOOTDEVICE_CDROM     0x03        // CDROM boot device
+#define KERNEL_BOOTDEVICE_USB       0x04        // USB boot device
+#define KERNEL_BOOTDEVICE_NETWORK   0x05        // Network boot device
+#define KERNEL_BOOTDEVICE_SCSI      0x06        // SCSI (Small Computer System Interface) boot device
+
+#define KERNEL_TEXTEDIT_BUFFSIZE    (4 * 1024)  // Buffer size of built-in text editor
+
+// Enable/disable kernel graphic mode
+#define KERNEL_GRAPHICMODE false
+
+// Exit codes
+
+#define EXIT_SUCCESS                0       // Success
+#define EXIT_FAILURE                1       // General failure
+#define EXIT_USAGE_ERROR            2       // Usage error
+#define EXIT_UNKNOWN_ERROR          3       // Unknown error
+#define EXIT_IO_ERROR               5       // I/O error
+#define EXIT_INVAILD_CONFIG         99      // Invalid configuration
+#define EXIT_PERMISSION_DENIED      126     // Permission denied
+#define EXIT_COMMAND_NOT_FOUND      127     // Command not found
+#define EXIT_INVALID_STATUS         128     // Invalid status
+#define EXIT_PROCESS_INTERRUPTED    130     // Process interrupted
+#define EXIT_PROCESS_KILLED         137     // Process killed
+#define EXIT_MEMORY_VIOLATION       139     // Memory violation
+#define EXIT_OUT_OF_RANGE           255     // Out of range error
+
+// Macro functions
+
+// Macro for handling kernel panic situations
 // Prints an error message with file and line information, then halts the system
 #define kernel_panic(format, ...) \
     do { \
@@ -34,91 +67,62 @@
         while (1) { asm volatile ("hlt"); } \
     } while (0)
 
-// Function prototype for get kernel size
-size_t kernel_getSize();
+// Public functions
 
-// Function prototype for handle command (Kernel Level)
-int kernel_commandHandler(char* path, char* str);
+size_t      kernel_size();      // Get kernel size
+size_t      kernel_memsize();   // Get physical memory size
+uint32_t    kernel_bootdev();   // Get boot device
 
-// Enumeration for boot device numbers
-enum KERNEL_BOOTDEVICETABLE {
-    BOOTDEVICE_INVALID  = 0,    // Invalid Device (Unknown Device)
-    BOOTDEVICE_HARDDISK = 1,    // Harddisk Device
-    BOOTDEVICE_FLOPPY   = 2,    // Floppy Device
-    BOOTDEVICE_CDROM    = 3,    // CDROM Device
-    BOOTDEVICE_USB      = 4,    // USB Device
-    BOOTDEVICE_NET      = 5,    // Network Device
-    BOOTDEVICE_SCSI     = 6     // Small Computer System Interface
-};
+int kernel_textEditor(char* path);                  // Built-in kernel text editor
+int kernel_commandHandler(char* path, char* cmd);   // Built-in kernel command handler
 
-// Define boot device type
-typedef enum KERNEL_BOOTDEVICETABLE kernel_bootdevice_t;
+// * Memory Management
 
-// Function prototypes for get memory size and boot device
-size_t kernel_getMemorySize();      // Gives Memory Size
-uint32_t kernel_getBootDevice();    // Gives Boot Device
-char* kernel_getBootDeviceStr();    // Gives Boot Device (as string)
+// Minimum memory size
+#define MEMORY_MINIMUMSIZE (4 * 1024 * 1024)
 
-// Function prototype for initialize hardware detector
-void kernel_initHWDetector(multiboot_info_t* info);     // Initialize Hardware Detector
-
-// * Memory management
-
-// Reserved space size
-#define MEMORY_SIZE (8 * 1024 * 1024)
-
-// Memory allocable block sizes and count
-#define MEMORY_BLOCKSIZE (4 * 1024)                         // Block size
-#define MEMORY_BLOCKCOUNT (MEMORY_SIZE / MEMORY_BLOCKSIZE)  // Block count
-
-// Memory report message max length
-#define MEMORY_REPORTMESSAGELENGTH 256
+// Allocable memory block size
+#define MEMORY_BLOCKSIZE (4 * 1024)
 
 // Allocable memory block structure
-struct memory_Block {
-    size_t number;      // Number of block
-    size_t count;       // Connected block count
-    bool allocated;     // Allocate state
-    void* entry;        // Block memory address
-};
+typedef struct {
+    size_t count;
+    bool allocated;
+    void* entry;
+} memory_Block_t;
 
-// Function prototypes
-void memory_init();             // Initializes the memory manager
-void* malloc(size_t size);      // Allocates memory
-void free(void* allocated);     // Frees memory
-struct memory_Block* memory_blkInfo(void* allocated);   // Sends information about allocated memory block
-char* memory_report();          // Writes a memory report
+// Public functions
 
-// * Multitasking
+void*   malloc(size_t size);                        // Allocates memory
+// void*   calloc(size_t size);                        // Allocates cleared memory
+void*   realloc(void* allocated, size_t size);      // Reallocates memory
+void    free(void* allocated);                      // Frees memory
+void    memory_init(uint64_t size);                 // Initializes memory manager
+char*   memory_report();                            // Writes a memory report
+memory_Block_t* memory_blkInfo(void* allocated);    // Returns block information
 
-// Maximum process limit value
-#define MULTITASK_MAX_PROCESS_LIMIT 32
+// * Process Management
 
-// Multitask context structure
-// ! NOTE: This structure is no longer needed because the context switch system was failed.
-struct multitask_Context {
-    uint32_t EAX, EBX, ECX, EDX, ESI, EDI, EBP, ESP, EFLAGS;
-};
+// Public functions
 
-// Multitask process structure
-struct multitask_Process {
-    bool active;
-    struct multitask_Context context;
-    size_t inst;
-    size_t size;
-    void* base;
-};
+void    process_init();                             // Initializes process manager
+int     spawn(char* name, void* program);           // Spawns a process
+int     kill(int pid);                              // Kills a process
+void    yield();                                    // Switch next process
+void    exit();                                     // End process
 
-// Function prototypes
+// * System Call Management
 
-// Function for spawn a process
-int spawn(void* program_addr, size_t memory_size);
+// List of system calls
+#define SYS_EXIT        0x01                        // End current process
+#define SYS_SPAWN       0x02                        // Spawn a process
+#define SYS_READ        0x03
+#define SYS_WRITE       0x04
+// #define SYS_YIELD 0x9E
 
-// Function for kill a process
-int kill(int pid);
+#define STDIN           0                           // Standard input
+#define STDOUT          1                           // Standard output
 
-// Function for switch to next process
-void yield();
-
-// Function for initialize multitasking system
-int multitask_init();
+void syscall_init();                                // Initializes system call manager
+size_t read(int fd, void* buf, size_t count);
+size_t write(int fd, void* buf, size_t count);
