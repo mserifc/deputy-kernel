@@ -6,11 +6,6 @@ bool keyboard_KeyState[0x59];
 // Shift state
 bool keyboard_ShiftState = false;
 
-// Initialize state
-bool keyboard_InitState = false;
-
-bool keyboard_ScanState = false;
-
 // US Keyboard Layout
 const uint8_t keyboard_Layout[128][2] = {
  // { X  ,  X },       Shift off    | Shift On      | Code
@@ -113,50 +108,41 @@ const uint8_t keyboard_Layout[128][2] = {
     {0x58,  0 },    // F12 Key      | Unknown       | 0x58
 };
 
-void keyboard_handler(void) { keyboard_ScanState = true; }
-
 // Function for read key from keyboard
 char keyboard_scankey() {
-    if (!keyboard_InitState) {
-        interrupts_IDTSetGate(INTERRUPTS_PIC_MASTER_OFFSET+INTERRUPTS_IRQ_KEYBOARD, (size_t)keyboard_handler);
-        interrupts_PICIRQEnable(INTERRUPTS_IRQ_KEYBOARD);
-        keyboard_InitState = true;
-    }
-    asm volatile ("sti");
-    uint8_t key, gate;
-    asm volatile ("hlt");
-    gate = true;
-    key = port_inb(KEYBOARD_PORT);
-    if (keyboard_ScanState == false) { return 0; } else {
-        keyboard_ScanState = false;
-    }
-    if (key == KEYBOARD_KEY_CAPSLOCK) {
-        if (keyboard_ShiftState) {
-            keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] = false;
-            keyboard_ShiftState = false;
-        } else {
-            keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] = true;
-            keyboard_ShiftState = true;
+    uint8_t current, new, input;
+    current = port_inb(KEYBOARD_PORT);
+    while (1) {
+        new = port_inb(KEYBOARD_PORT);
+        if (new == KEYBOARD_KEY_CAPSLOCK) {
+            if (keyboard_ShiftState) {
+                keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] = false;
+                keyboard_ShiftState = false; continue;
+            } else {
+                keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK] = true;
+                keyboard_ShiftState = true; continue;
+            }
         }
+        if (
+            new == KEYBOARD_KEY_LEFT_SHIFT ||
+            new == KEYBOARD_KEY_RIGHT_SHIFT
+        ) {
+            if (!keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK]) {
+                keyboard_ShiftState = true; continue;
+            } else { continue; }
+        } else if (
+            new == KEYBOARD_KEY_LEFT_SHIFT + 0x80 ||
+            new == KEYBOARD_KEY_RIGHT_SHIFT + 0x80
+        ) {
+            if (!keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK]) {
+                keyboard_ShiftState = false; continue;
+            } else { continue; }
+        }
+        if (current != new) { input = new; break; }
     }
-    if (
-        key == KEYBOARD_KEY_LEFT_SHIFT ||
-        key == KEYBOARD_KEY_RIGHT_SHIFT
-    ) {
-        if (!keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK]) {
-            keyboard_ShiftState = true;
-        } else {}
-    } else if (
-        key == KEYBOARD_KEY_LEFT_SHIFT + 0x80 ||
-        key == KEYBOARD_KEY_RIGHT_SHIFT + 0x80
-    ) {
-        if (!keyboard_KeyState[KEYBOARD_KEY_CAPSLOCK]) {
-            keyboard_ShiftState = false;
-        } else {}
+    if (input < 0x80) {
+        return (char)keyboard_Layout[input][keyboard_ShiftState];
+    } else {
+        return 0;
     }
-    if (gate) {
-        if (key < 0x80) {
-            return (char)keyboard_Layout[key][keyboard_ShiftState];
-        } else { return 0; }
-    } else { return 0; }
 }

@@ -20,8 +20,8 @@ struct gdt_Pointer {
     uint32_t base;              // The starting address of the GDT in memory
 } __attribute__((packed));      // 'packed' ensures no padding is added
 
-// Function Prototype for set Specific GDT Entry
-void gdt_setEntry(
+// Function prototype for set specific GDT Entry
+void gdt_setEntry (
     int num,                    // Index of the entry in the GDT
     uint32_t base,              // The starting address of the segment
     uint32_t limit,             // The size of the segment
@@ -29,8 +29,8 @@ void gdt_setEntry(
     uint8_t granularity         // Granularity setting for segment size
 );
 
-// Function Prototype for load the GDT into CPU's GDT Pointer Register
+// Function prototype for load the GDT into CPU's GDT Pointer Register
 void gdt_flush(uint32_t ptr);   // This will update the CPU's GDT register with the new GDT
 
-// Function Prototype for initialize the GDT
+// Function prototype for initialize the GDT
 void gdt_init();                // Initializes the GDT and sets up necessary pointers

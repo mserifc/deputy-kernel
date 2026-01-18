@@ -5,30 +5,43 @@
 #include "platform/i386/port.h"
 #include "common.h"
 
-#define ICW1_ICW4 0x01          // Indicates that ICW4 will be present
-#define ICW1_SINGLE 0x02        // Single (cascade) mode
-#define ICW1_INTERVAL4 0x04     // Call address interval 4 (8)
-#define ICW1_LEVEL 0x08         // Level triggered (edge) mode
-#define ICW1_INIT 0x10          // Initialization - required!
+// Initialization Command Words (ICW)
+#define INTERRUPTS_PIC_ICW1_ICW4 0x01           // Indicates that ICW4 will be present
+#define INTERRUPTS_PIC_ICW1_SINGLE 0x02         // Single (cascade) mode
+#define INTERRUPTS_PIC_ICW1_INTERVAL4 0x04      // Call address interval 4 (8)
+#define INTERRUPTS_PIC_ICW1_LEVEL 0x08          // Level triggered (edge) mode
+#define INTERRUPTS_PIC_ICW1_INIT 0x10           // Initialization - required!
 
-#define ICW4_8086 0x01          // 8086/88 (MCS-80/85) mode
-#define ICW4_AUTO 0x02          // Auto (normal) EOI
-#define ICW4_BUF_SLAVE 0x08     // Buffered mode/slave
-#define ICW4_BUF_MASTER 0x0C    // Buffered mode/master
-#define ICW4_SFNM 0x10          // Special fully nested (not)
+// Initialization Command Word 4 (ICW4) Options
+#define INTERRUPTS_PIC_ICW4_8086 0x01           // 8086/88 (MCS-80/85) mode
+#define INTERRUPTS_PIC_ICW4_AUTO 0x02           // Auto (normal) EOI
+#define INTERRUPTS_PIC_ICW4_BUF_SLAVE 0x08      // Buffered mode/slave
+#define INTERRUPTS_PIC_ICW4_BUF_MASTER 0x0C     // Buffered mode/master
+#define INTERRUPTS_PIC_ICW4_SFNM 0x10           // Special fully nested (not)
 
-#define PIC1 0x20               // Master PIC
-#define PIC2 0xA0               // Slave PIC
+// PIC Base Addresses
+#define INTERRUPTS_PIC_MASTER 0x20              // Base address of Master PIC
+#define INTERRUPTS_PIC_SLAVE 0xA0               // Base address of Slave PIC
 
-#define PIC1_CMD (PIC1)         // Master PIC Command Port
-#define PIC1_DATA (PIC1 + 1)    // Master PIC Data Port
-#define PIC2_CMD (PIC2)         // Slave PIC Command Port
-#define PIC2_DATA (PIC2 + 1)    // Slave PIC Data Port
+// PIC Command and Data Ports
+#define INTERRUPTS_PIC_MASTER_CMD               /* Command port for the Master PIC */ \
+    (INTERRUPTS_PIC_MASTER)
+#define INTERRUPTS_PIC_SLAVE_CMD                /* Command port for the Slave PIC */ \
+    (INTERRUPTS_PIC_SLAVE)
+#define INTERRUPTS_PIC_MASTER_DATA              /* Data port for the Master PIC */ \
+    (INTERRUPTS_PIC_MASTER + 1)
+#define INTERRUPTS_PIC_SLAVE_DATA               /* Data port for the Slave PIC */ \
+    (INTERRUPTS_PIC_SLAVE + 1)
 
-#define PIC_READ_IRR 0x0a       // Interrupt Request Register (IRR)
-#define PIC_READ_ISR 0x0b       // In-Service Register (ISR)
+#define INTERRUPTS_PIC_MASTER_OFFSET 0x20       // Master PIC interrupt vector offset
+#define INTERRUPTS_PIC_SLAVE_OFFSET 0x28        // Slave PIC interrupt vector offset
 
-#define PIC_EOI 0x20            // End-Of-Interrupt Command Code
+// PIC Interrupt Registers
+#define INTERRUPTS_PIC_IRR 0x0A                 // Interrupt Request Register (IRR)
+#define INTERRUPTS_PIC_ISR 0x0B                 // Interrupt Service Register (ISR)
+
+// End-of-Interrupt (EOI)
+#define INTERRUPTS_PIC_EOI 0x20                 // End-of-Interrupt command
 
 // IDT Entry Structure
 // This structure defines the entry of the Interrupt Descriptor Table (IDT).
@@ -49,26 +62,26 @@ struct interrupts_IDTPointer {
 
 // Enumeration for IRQ numbers
 // This enum defines the IRQ numbers used by various hardware devices.
-enum interrupts_IRQTABLE {
-    IRQ_TIMER           = 0x00, // Programmable Interrupt Timer Interrupt
-    IRQ_KEYBOARD        = 0x01, // Keyboard Interrupt
-    IRQ_CASCADE         = 0x02, // Cascade (used internally by the two PICs. never raised)
-    IRQ_COM2            = 0x03, // COM2 (if enabled)
-    IRQ_COM1            = 0x04, // COM1 (if enabled)
-    IRQ_LPT2            = 0x05, // LPT2 (if enabled)
-    IRQ_FLOPPY          = 0x06, // Floppy Disk
-    IRQ_LPT1            = 0x07, // LPT1 / Unreliable "spurious" interrupt (usually)
-    IRQ_RTC             = 0x08, // CMOS real-time clock (if enabled)
-    IRQ_FREE_1          = 0x09, // Free for peripherals / legacy SCSI / NIC
-    IRQ_FREE_2          = 0x0A, // Free for peripherals / SCSI / NIC
-    IRQ_FREE_3          = 0x0B, // Free for peripherals / SCSI / NIC
-    IRQ_MOUSE           = 0x0C, // PS2 Mouse
-    IRQ_FPU             = 0x0D, // FPU / Coprocessor / Inter-processor
-    IRQ_PRIMARY_ATA     = 0x0E, // Primary ATA Hard Disk
-    IRQ_SECONDARY_ATA   = 0x0F  // Secondary ATA Hard Disk
+enum INTERRUPTS_IRQTABLE {
+    INTERRUPTS_IRQ_TIMER            = 0x00, // Programmable Interrupt Timer Interrupt
+    INTERRUPTS_IRQ_KEYBOARD         = 0x01, // Keyboard Interrupt
+    INTERRUPTS_IRQ_CASCADE          = 0x02, // Cascade (used internally by the two PICs. never raised)
+    INTERRUPTS_IRQ_COM2             = 0x03, // COM2 (if enabled)
+    INTERRUPTS_IRQ_COM1             = 0x04, // COM1 (if enabled)
+    INTERRUPTS_IRQ_LPT2             = 0x05, // LPT2 (if enabled)
+    INTERRUPTS_IRQ_FLOPPY           = 0x06, // Floppy Disk
+    INTERRUPTS_IRQ_LPT1             = 0x07, // LPT1 / Unreliable "spurious" interrupt (usually)
+    INTERRUPTS_IRQ_RTC              = 0x08, // CMOS real-time clock (if enabled)
+    INTERRUPTS_IRQ_FREE_1           = 0x09, // Free for peripherals / legacy SCSI / NIC
+    INTERRUPTS_IRQ_FREE_2           = 0x0A, // Free for peripherals / SCSI / NIC
+    INTERRUPTS_IRQ_FREE_3           = 0x0B, // Free for peripherals / SCSI / NIC
+    INTERRUPTS_IRQ_MOUSE            = 0x0C, // PS2 Mouse
+    INTERRUPTS_IRQ_FPU              = 0x0D, // FPU / Coprocessor / Inter-processor
+    INTERRUPTS_IRQ_PRIMARY_ATA      = 0x0E, // Primary ATA Hard Disk
+    INTERRUPTS_IRQ_SECONDARY_ATA    = 0x0F  // Secondary ATA Hard Disk
 };
 
-typedef enum interrupts_IRQTABLE interrupts_IRQ;    // Define IRQ Type
+typedef enum INTERRUPTS_IRQTABLE interrupts_irq_t;      // Define IRQ Type
 
 void interrupts_exception0x00(void);
 void interrupts_exception0x01(void);
@@ -105,17 +118,17 @@ void interrupts_exception0x1F(void);
 
 void interrupts_exceptionInterruptsInit(void);
 
-// Function Prototypes
+// Function prototypes
 __attribute__((noreturn))
 void interrupts_exceptionHandler(uint8_t num);                  // Exception handler for interrupts
-void interrupts_defaultHandler(void);                           // Default Interrupt Handler
+void interrupts_defaultHandler(void);                           // Default interrupt handler
 
 // PIC related functions
 void interrupts_PICSendEOI(uint8_t irq);                        // Send End-of-Interrupt (EOI) signal to the PIC
 uint16_t interrupts_PICGetIRR(void);                            // Get the Interrupt Request Register (IRR) from the PIC
 uint16_t interrupts_PICGetISR(void);                            // Get the In-Service Register (ISR) from the PIC
 
-// IRQ Enable/Disable functions
+// IRQ enable/disable functions
 void interrupts_PICIRQEnable(uint8_t irq);                      // Enable a specific IRQ on the PIC
 void interrupts_PICIRQDisable(uint8_t irq);                     // Disable a specific IRQ on the PIC
 

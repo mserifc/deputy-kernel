@@ -8,9 +8,7 @@ display_color_t display_TextColor;
 
 // Function for clear the entire screen
 void display_clear() {
-    for (int i = 0; i < (display_CLIWIDTH * display_CLIHEIGHT); ++i) {
-        // display_VideoMemory[i] =
-        //     (display_VideoMemory[i] & (short)0xFF00) | (short)0x0000;
+    for (int i = 0; i < (DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT); ++i) {
         display_VideoMemory[i] =
             (short)(((display_BackgroundColor << 4) | display_TextColor) << 8) | (short)0x0000;
     }
@@ -18,9 +16,7 @@ void display_clear() {
 
 // Function for print a single character at a specified position (pointer) on the screen
 void display_putchar(char chr, int ptr) {
-    if (ptr >= 0 && ptr < (display_CLIWIDTH * display_CLIHEIGHT)) {
-        // display_VideoMemory[ptr] =
-        //     (display_VideoMemory[ptr] & (short)0xFF00) | (short)chr;
+    if (ptr >= 0 && ptr < (DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT)) {
         display_VideoMemory[ptr] =
             (short)(((display_BackgroundColor << 4) | display_TextColor) << 8) | (short)chr;
     }
@@ -47,7 +43,6 @@ void display_disablecursor() {
 
 // Function for set the cursor to a specific screen position (pointer)
 void display_putcursor(int ptr) {
-    // uint16_t ptr = y * display_CLIWIDTH + x;
     port_outb(0x3D4, 0x0F);
     port_outb(0x3D5, (uint8_t)(ptr & 0xFF));
     port_outb(0x3D4, 0x0E);
@@ -66,6 +61,7 @@ size_t display_getcursor() {
 
 // Function for initialize display driver
 void display_init() {
-    display_BackgroundColor = (uint8_t)((display_VideoMemory[0] & 0xF000) >> 12);
-    display_TextColor = (uint8_t)((display_VideoMemory[0] & 0x0F00) >> 8);
+    display_BackgroundColor = (uint8_t)((display_VideoMemory[0] & 0xF000) >> 12);   // Get default display background color
+    display_TextColor = (uint8_t)((display_VideoMemory[0] & 0x0F00) >> 8);          // Get default display character color
+    display_enablecursor(14, 15);                                                   // Enable display cursor
 }

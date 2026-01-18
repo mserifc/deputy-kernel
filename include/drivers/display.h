@@ -4,31 +4,31 @@
 #include "platform/i386/port.h"
 
 // Define screen width and height for the Command Line Interface (CLI)
-#define display_CLIWIDTH 80     // 80 columns
-#define display_CLIHEIGHT 25    // 25 rows
+#define DISPLAY_CLIWIDTH 80     // 80 columns
+#define DISPLAY_CLIHEIGHT 25    // 25 rows
 
 // Enumeration for display color
-enum display_COLORTABLE {
-    display_COLOR_BLACK         = 0x00,
-    display_COLOR_BLUE          = 0x01,
-    display_COLOR_GREEN         = 0x02,
-    display_COLOR_CYAN          = 0x03,
-    display_COLOR_RED           = 0x04,
-    display_COLOR_MAGENTA       = 0x05,
-    display_COLOR_BROWN         = 0x06,
-    display_COLOR_GRAY          = 0x07,
-    display_COLOR_DARK_GRAY     = 0x08,
-    display_COLOR_LIGHT_BLUE    = 0x09,
-    display_COLOR_LIGHT_GREEN   = 0x0A,
-    display_COLOR_LIGHT_CYAN    = 0x0B,
-    display_COLOR_LIGHT_RED     = 0x0C,
-    display_COLOR_LIGHT_MAGENTA = 0x0D,
-    display_COLOR_YELLOW        = 0x0E,
-    display_COLOR_WHITE         = 0x0F
+enum DISPLAY_COLORTABLE {
+    DISPLAY_COLOR_BLACK         = 0x00,
+    DISPLAY_COLOR_BLUE          = 0x01,
+    DISPLAY_COLOR_GREEN         = 0x02,
+    DISPLAY_COLOR_CYAN          = 0x03,
+    DISPLAY_COLOR_RED           = 0x04,
+    DISPLAY_COLOR_MAGENTA       = 0x05,
+    DISPLAY_COLOR_BROWN         = 0x06,
+    DISPLAY_COLOR_GRAY          = 0x07,
+    DISPLAY_COLOR_DARK_GRAY     = 0x08,
+    DISPLAY_COLOR_LIGHT_BLUE    = 0x09,
+    DISPLAY_COLOR_LIGHT_GREEN   = 0x0A,
+    DISPLAY_COLOR_LIGHT_CYAN    = 0x0B,
+    DISPLAY_COLOR_LIGHT_RED     = 0x0C,
+    DISPLAY_COLOR_LIGHT_MAGENTA = 0x0D,
+    DISPLAY_COLOR_YELLOW        = 0x0E,
+    DISPLAY_COLOR_WHITE         = 0x0F
 };
 
-// Enum type alias for display color, to use as a color reference
-typedef enum display_COLORTABLE display_color_t;
+// Define display color type
+typedef enum DISPLAY_COLORTABLE display_color_t;
 
 // Function prototypes
 void display_clear();                                   // Clear the entire screen
