@@ -14,7 +14,7 @@ LOADER = $(SRC_DIR)/loader.s
 OBJ = $(BUILD_DIR)/loader.o $(BUILD_DIR)/kernel.o
 
 EMULATOR = qemu-system-i386
-EMULATOR_FLAGS = -kernel
+EMULATOR_FLAGS = -monitor stdio -kernel
 
 all: $(BUILD_DIR)/kernel.elf
 

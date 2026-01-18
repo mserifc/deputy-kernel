@@ -17,6 +17,8 @@ loader:
     push eax
     push ebx
 
+    cli
+
     call _kernel_main
 
 _stop:
