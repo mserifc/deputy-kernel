@@ -9,23 +9,23 @@ section .multiboot
 
 section .text
     extern _kernel_main
-    global loader
+    global _kernel_entry
 
-loader:
-    mov esp, kernel_stack
+_kernel_entry:
+    mov esp, _kernel_stack
 
     push eax
     push ebx
-
+    
     cli
 
-    call _kernel_main
+    jmp _kernel_main
 
-_stop:
+_halt:
     cli
     hlt
-    jmp _stop
+    jmp _halt
 
 section .bss
     resb 2*1024*1024
-kernel_stack:
+_kernel_stack:
