@@ -1,0 +1,103 @@
+#pragma once
+
+#include "types.h"
+#include "common.h"
+#include "platform/i386/port.h"
+#include "platform/i386/interrupts.h"
+
+#define KEYBOARD_PORT 0x60
+
+enum keyboard_KEYTABLE {
+    keyboard_KEY_ESCAPE         = 0x01,
+    keyboard_KEY_1              = 0x02,
+    keyboard_KEY_2              = 0x03,
+    keyboard_KEY_3              = 0x04,
+    keyboard_KEY_4              = 0x05,
+    keyboard_KEY_5              = 0x06,
+    keyboard_KEY_6              = 0x07,
+    keyboard_KEY_7              = 0x08,
+    keyboard_KEY_8              = 0x09,
+    keyboard_KEY_9              = 0x0A,
+    keyboard_KEY_0              = 0x0B,
+    keyboard_KEY_MINUS          = 0x0C,
+    keyboard_KEY_EQUAL          = 0x0D,
+    keyboard_KEY_BACKSPACE      = 0x0E,
+    keyboard_KEY_TAB            = 0x0F,
+    keyboard_KEY_Q              = 0x10,
+    keyboard_KEY_W              = 0x11,
+    keyboard_KEY_E              = 0x12,
+    keyboard_KEY_R              = 0x13,
+    keyboard_KEY_T              = 0x14,
+    keyboard_KEY_Y              = 0x15,
+    keyboard_KEY_U              = 0x16,
+    keyboard_KEY_I              = 0x17,
+    keyboard_KEY_O              = 0x18,
+    keyboard_KEY_P              = 0x19,
+    keyboard_KEY_LBRACKET       = 0x1A,
+    keyboard_KEY_RBRACKET       = 0x1B,
+    keyboard_KEY_ENTER          = 0x1C,
+    keyboard_KEY_LEFT_CTRL      = 0x1D,
+    keyboard_KEY_A              = 0x1E,
+    keyboard_KEY_S              = 0x1F,
+    keyboard_KEY_D              = 0x20,
+    keyboard_KEY_F              = 0x21,
+    keyboard_KEY_G              = 0x22,
+    keyboard_KEY_H              = 0x23,
+    keyboard_KEY_J              = 0x24,
+    keyboard_KEY_K              = 0x25,
+    keyboard_KEY_L              = 0x26,
+    keyboard_KEY_SEMICOLON      = 0x27,
+    keyboard_KEY_QUOTE          = 0x28,
+    keyboard_KEY_BACKTICK       = 0x29,
+    keyboard_KEY_LEFT_SHIFT     = 0x2A,
+    keyboard_KEY_BACKSLASH      = 0x2B,
+    keyboard_KEY_Z              = 0x2C,
+    keyboard_KEY_X              = 0x2D,
+    keyboard_KEY_C              = 0x2E,
+    keyboard_KEY_V              = 0x2F,
+    keyboard_KEY_B              = 0x30,
+    keyboard_KEY_N              = 0x31,
+    keyboard_KEY_M              = 0x32,
+    keyboard_KEY_COMMA          = 0x33,
+    keyboard_KEY_DOT            = 0x34,
+    keyboard_KEY_SLASH          = 0x35,
+    keyboard_KEY_RIGHT_SHIFT    = 0x36,
+    keyboard_KEY_ASTERISK       = 0x37,
+    keyboard_KEY_LEFT_ALT       = 0x38,
+    keyboard_KEY_SPACE          = 0x39,
+    keyboard_KEY_CAPSLOCK       = 0x3A,
+    keyboard_KEY_F1             = 0x3B,
+    keyboard_KEY_F2             = 0x3C,
+    keyboard_KEY_F3             = 0x3D,
+    keyboard_KEY_F4             = 0x3E,
+    keyboard_KEY_F5             = 0x3F,
+    keyboard_KEY_F6             = 0x40,
+    keyboard_KEY_F7             = 0x41,
+    keyboard_KEY_F8             = 0x42,
+    keyboard_KEY_F9             = 0x43,
+    keyboard_KEY_F10            = 0x44,
+    keyboard_KEY_NUMLOCK        = 0x45,
+    keyboard_KEY_SCROLLLOCK     = 0x46,
+    keyboard_KEY_PAD_7          = 0x47,
+    keyboard_KEY_PAD_8          = 0x48,
+    keyboard_KEY_PAD_9          = 0x49,
+    keyboard_KEY_PAD_MINUS      = 0x4A,
+    keyboard_KEY_PAD_4          = 0x4B,
+    keyboard_KEY_PAD_5          = 0x4C,
+    keyboard_KEY_PAD_6          = 0x4D,
+    keyboard_KEY_PAD_PLUS       = 0x4E,
+    keyboard_KEY_PAD_1          = 0x4F,
+    keyboard_KEY_PAD_2          = 0x50,
+    keyboard_KEY_PAD_3          = 0x51,
+    keyboard_KEY_PAD_0          = 0x52,
+    keyboard_KEY_PAD_DOT        = 0x53,
+    keyboard_KEY_F11            = 0x57,
+    keyboard_KEY_F12            = 0x58
+};
+
+typedef enum keyboard_KEYTABLE keyboard_Key;
+
+uint8_t keyboard_scankeycode();
+char keyboard_scankey();
+
+// void keyboard_init();
