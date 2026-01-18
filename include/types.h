@@ -26,6 +26,8 @@ typedef unsigned long long uint64_t;    // Unsigned 64 bit integer type
 
 typedef unsigned int size_t;    // Size type for represent sizes and memory offsets
 
+typedef void (*func_t)(void);   // Function type for represent function address
+
 typedef unsigned char bool;     // Boolean type for represent true/false values
 
 #define true 1      // True macro for use with boolean values
@@ -33,13 +35,16 @@ typedef unsigned char bool;     // Boolean type for represent true/false values
 
 #define NULL ((void*)0)     // Null pointer for indicating no valid memory address
 
-#define STRING(x) #x            // Macro for convert macro name to ASCII string
-#define NUMBER(x) STRING(x)     // Macro for context number value of macro to ASCII string
-#define ALIGN(x, a) (((x) + ((a)-1)) & ~((a)-1))
-#define NAKED __attribute__((naked))
-#define PACKED __attribute__((packed))
-#define NORETURN __attribute__((noreturn))
-#define INTERRUPT __attribute__((interrupt))
+#define STRINGIFY(x) #x             // Macro for convert macro name to ASCII string
+#define STRING(x) STRINGIFY(x)      // Macro for convert macro value to ASCII string
+#define ALIGN(x, a) (((x) + ((a)-1)) & ~((a)-1))    // Aligns x to a multiple of a
+#define NAKED __attribute__((naked))                // No prologue or epilogue in the function
+#define PACKED __attribute__((packed))              // No padding between structure members
+#define NORETURN __attribute__((noreturn))          // Function does not return
+#define INTERRUPT __attribute__((interrupt))        // Marks a function as an interrupt handler
+#define UNUSED __attribute__((unused))              // Marks a function or variable as unused
+#define USED __attribute__((used))                  // Marks a function or variable as used
+#define ALIGNED(x) (__attribute__((aligned(x))))    // Align a structure to x bytes
 
 #define va_list __builtin_va_list                       // Type definition for variable argument list
 #define va_start(ap, last) __builtin_va_start(ap, last) // Initialize variable argument list

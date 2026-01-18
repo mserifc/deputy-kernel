@@ -1,0 +1,84 @@
+# Compiler and Linker (Clang)
+CC = clang
+LD = clang
+
+# Assembler (Clang)
+AS = clang
+
+# Compiler flags
+CC_FLAGS = \
+	-target i386-elf \
+	-m32 \
+	-Wextra \
+	-nostdlib \
+	-ffreestanding \
+	-fno-builtin \
+	-fno-exceptions \
+	-I include
+
+# Assembler flags
+AS_FLAGS = -target i386-elf -m32
+
+# Linker flags (note: we pass the linker script via -Wl)
+LD_FLAGS = \
+	-target i386-elf \
+	-m32 \
+	-nostdlib \
+	-Wl,-T,linker.ld
+
+# Build directory
+BUILD_DIR = build
+SOURCE_DIR = source
+KERNEL = $(BUILD_DIR)/kernel.elf
+LINKER = linker.ld
+
+OBJECTS = \
+	$(BUILD_DIR)/kernel/entry.o \
+	$(BUILD_DIR)/kernel/kernel.o \
+	$(BUILD_DIR)/kernel/console.o \
+	$(BUILD_DIR)/kernel/utils.o \
+	$(BUILD_DIR)/kernel/memory.o \
+	$(BUILD_DIR)/kernel/corefs.o \
+	$(BUILD_DIR)/kernel/multitask_swi.o \
+	$(BUILD_DIR)/kernel/multitask.o \
+	$(BUILD_DIR)/kernel/drivers.o \
+	\
+	$(BUILD_DIR)/hw/port.o \
+	$(BUILD_DIR)/hw/protect_flush.o \
+	$(BUILD_DIR)/hw/protect_init.o \
+	$(BUILD_DIR)/hw/interrupt_stubs.o \
+	$(BUILD_DIR)/hw/interrupts.o \
+	$(BUILD_DIR)/hw/acpi.o \
+	$(BUILD_DIR)/hw/devbus.o \
+	\
+	$(BUILD_DIR)/drv/usb.o
+
+EMULATOR = qemu-system-i386
+EMULATOR_FLAGS = -machine q35 -device qemu-xhci -device usb-mouse,id=mouse -rtc base=localtime -monitor stdio
+
+all: $(KERNEL)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Compile C files
+$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
+	mkdir -p $(@D)
+	$(CC) $(CC_FLAGS) -c $< -o $@
+
+# Assemble assembly files
+$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.s | $(BUILD_DIR)
+	mkdir -p $(@D)
+	$(AS) $(AS_FLAGS) -c $< -o $@
+
+# Link using Clang as the linker
+$(KERNEL): $(LINKER) $(OBJECTS)
+	$(LD) $(LD_FLAGS) -o $@ $(OBJECTS)
+
+run: $(KERNEL)
+	$(EMULATOR) $(EMULATOR_FLAGS) -kernel $(KERNEL)
+
+clean:
+	rm -f $(OBJECTS) $(KERNEL)
+
+.PHONY: all run clean

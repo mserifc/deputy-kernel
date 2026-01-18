@@ -5,7 +5,7 @@ OUTPUT_ARCH(i386:i386)          /* For 32-bit x86 architecture machines */
 SECTIONS
 {
     . = 0x100000;               /* Base address of the kernel in physical memory */
-    kernel_start = .;           /* Kernel start address */
+    kernel_Base = .;            /* Kernel base address */
 
     .text :                     /* Text section */
     {
@@ -32,5 +32,5 @@ SECTIONS
     }
 
     . = ALIGN(4);               /* Memory alignment */
-    kernel_end = .;             /* Kernel end address */
+    kernel_Limit = .;           /* Kernel limit address */
 }
