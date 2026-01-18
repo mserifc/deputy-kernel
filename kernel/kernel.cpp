@@ -1,22 +1,26 @@
 #define WIDTH 80
 #define HEIGHT 25
 
-#define USERCOMMANDSIZE 100
+#define MAX_USER_COMMAND_SIZE 100
 
 #define MAX_TOKENS 100
+
+#define MAX_FILE_COUNT 64
+#define MAX_FILENAME_LENGTH 32
+#define MAX_FILE_SIZE 4064
 
 unsigned short* VideoMemory = (unsigned short*)0xB8000;
 
 int cursor = 0;
 int shift = 0;
 
-unsigned char usercommand[USERCOMMANDSIZE];
+unsigned char usercommand[MAX_USER_COMMAND_SIZE];
 
 int backspacecount = 0;
 
 char* promptheader = "# ";
 
-typedef enum {
+enum ColorTable {
 	COLOR_BLACK = 0x00,
 	COLOR_BLUE = 0x01,
 	COLOR_GREEN = 0x02,
@@ -33,7 +37,7 @@ typedef enum {
 	COLOR_LIGHT_MAGENTA = 0x0D,
 	COLOR_YELLOW = 0x0E,
 	COLOR_WHITE = 0x0F
-} ColorTable;
+};
 
 unsigned char textcolor = COLOR_WHITE;
 unsigned char bgcolor = COLOR_BLACK;
@@ -68,6 +72,18 @@ const unsigned char shiftmap[(sizeof(keymap) / sizeof(keymap[0]))] = {
 	'8', '9', '-', '4', '5', '6', '+', '1', // 0x48 - 0x4F
 	'2', '3', '0', '.',  0 ,  0 ,  0 ,  0 , // 0x50 - 0x57
 };
+
+struct File {
+	char name[MAX_FILENAME_LENGTH];
+	char data[MAX_FILE_SIZE];
+};
+
+struct Directory {
+	struct File files[MAX_FILE_COUNT];
+	int filecount = 0;
+};
+
+struct Directory root[MAX_FILE_COUNT];
 
 void outb(unsigned short port, unsigned char value) {
 	asm volatile (
@@ -140,6 +156,16 @@ void clear() {
 	cursor = 0;
 }
 
+void loadBackcolor() {
+	for (int i = 0; i < (WIDTH * HEIGHT); ++i) {
+		VideoMemory[i] = (((short)bgcolor & 0x0F) << 12) | (((short)textcolor & 0x0F) << 8) | (VideoMemory[i] & 0x00FF);
+	}
+}
+
+void loadCursor() {
+	VideoMemory[cursor] = (((short)textcolor & 0x0F) << 12) | (((short)bgcolor & 0x0F) << 8) | (VideoMemory[cursor] & 0x00FF);
+}
+
 void set_cursor(int x, int y) {
 	if (x < WIDTH && y < HEIGHT) {
 		cursor = (y * WIDTH) + x;
@@ -153,7 +179,13 @@ void delay(int milliseconds) {
 	}
 }
 
-int length(unsigned char *str) {
+int ulength(unsigned char *str) {
+	int i = 0;
+	while (str[i] != '\0') { i++; }
+	return i;
+}
+
+int length(char* str) {
 	int i = 0;
 	while (str[i] != '\0') { i++; }
 	return i;
@@ -190,27 +222,333 @@ int strcmp(const char* str1, const char* str2) {
 	return *(unsigned char*)str1 - *(unsigned char*)str2;
 }
 
+char* strcpy(char* dest, const char* src) {
+	char* original_dest = dest;
+	while (*src != '\0') {
+		*dest = *src;
+		dest++;
+		src++;
+	}
+	*dest = '\0';
+	return original_dest;
+}
+
+void intToString(int num, char* str) {
+	int temp = num;
+	int len = 0;
+	while (temp > 0) {
+		len++;
+		temp /= 10;
+	}
+	str[len] = '\0';
+	while (num > 0) {
+		str[--len] = (num % 10) + '0';
+		num /= 10;
+	}
+}
+
+void splitNumber(int num, int* digits, int *len) {
+	int temp = num;
+	int digit = 0;
+	if (num == 0) {
+		digits[0] = 0;
+		*len = 1;
+		return;
+	}
+	while (temp != 0) {
+		temp /= 10;
+		digit++;
+	}
+	temp = num;
+	for (int i = digit - 1; i >= 0; i--) {
+		digits[i] = temp % 10;
+		temp /= 10;
+	}
+	*len = digit;
+}
+
+char toChar(int num) {
+	switch (num) {
+		case 0:
+			return '0';
+		case 1:
+			return '1';
+		case 2:
+			return '2';
+		case 3:
+			return '3';
+		case 4:
+			return '4';
+		case 5:
+			return '5';
+		case 6:
+			return '6';
+		case 7:
+			return '7';
+		case 8:
+			return '8';
+		case 9:
+			return '9';
+		default:
+			return -1;
+	}
+}
+
+int toNumber(char character) {
+	switch (character) {
+		case '0':
+			return 0;
+		case '1':
+			return 1;
+		case '2':
+			return 2;
+		case '3':
+			return 3;
+		case '4':
+			return 4;
+		case '5':
+			return 5;
+		case '6':
+			return 6;
+		case '7':
+			return 7;
+		case '8':
+			return 8;
+		case '9':
+			return 9;
+		default:
+			return -1;
+	}
+}
+
+int isNumber(char* str) {
+	for (int i = 0; i < length(str); ++i) {
+		if (toNumber(str[i]) == -1) {
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int initDirectory(struct Directory* dir) {
+	for (int i = 0; i < MAX_FILE_COUNT; ++i) {
+		for (int j = 0; j < MAX_FILENAME_LENGTH; ++j) {
+			dir->files[i].name[j] = '\0';
+		}
+		for (int j = 0; j < MAX_FILE_SIZE; ++j) {
+			dir->files[i].data[j] = '\0';
+		}
+	}
+	dir->filecount = 0;
+	return 0;
+}
+
+int createFile(struct Directory* dir, char* filename, char* content) {
+	if (dir->filecount >= (MAX_FILE_COUNT - 1)) {
+		return -1;
+	}
+	strcpy(dir->files[dir->filecount].name, filename);
+	dir->files[dir->filecount].name[MAX_FILENAME_LENGTH - 1] = '\0';
+	strcpy(dir->files[dir->filecount].data, content);
+	dir->files[dir->filecount].data[MAX_FILE_SIZE - 1] = '\0';
+	dir->filecount++;
+	return 0;
+}
+
+File* findFile(struct Directory* dir, char* filename) {
+	for (int i = 0; i < dir->filecount; i++) {
+		if (strcmp(dir->files[i].name, filename) == 0) {
+			return &dir->files[i];
+		}
+	}
+	return 0;
+}
+
+int findIndex(struct Directory* dir, char* filename) {
+	for (int i = 0; i < dir->filecount; i++) {
+		if (strcmp(dir->files[i].name, filename) == 0) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void writeFile(struct Directory* dir, char* filename, char* content) {
+	if (findFile(root, filename) == 0) {
+		createFile(root, filename, content);
+	} else {
+		strcpy(findFile(root, filename)->data, content);
+	}
+}
+
+int removeFile(struct Directory* dir, char* filename) {
+	int targetindex = findIndex(dir, filename);
+	if (targetindex != -1) {
+		for (int i = (targetindex + 1); i < dir->filecount; ++i) {
+			for (int j = 0; j < MAX_FILENAME_LENGTH; ++j) {
+				dir->files[i - 1].name[j] = dir->files[i].name[j];
+			}
+			for (int j = 0; j < MAX_FILE_SIZE; ++j) {
+				dir->files[i - 1].data[j] = dir->files[i].data[j];
+			}
+		}
+		for (int i = 0; i < MAX_FILENAME_LENGTH; ++i) {
+			dir->files[dir->filecount + 1].name[i] = '\0';
+		}
+		for (int i = 0; i < MAX_FILE_SIZE; ++i) {
+			dir->files[dir->filecount + 1].data[i] = '\0';
+		}
+		dir->filecount--;
+		return 0;
+	} else { return -1; }
+}
+
+void _errorCommandnotfound(char* commandname) {
+	printf("Command ");
+	printf(commandname);
+	printf(" not found.");
+}
+
+void _errorNotentered(char* thing) {
+	printf(thing);
+	printf(" not entered.");
+}
+
+void _errorUnabletonothing(char* action) {
+	printf("Unable to ");
+	printf(action);
+	printf(" nothing");
+}
+
+void _errorFilenotfound(char* filename) {
+	printf("File ");
+	printf(filename);
+	printf(" not found.");
+}
+
+void _errorFilelimit(char* filename) {
+	printf("Unable to create file ");
+	printf(filename);
+	printf(": File limit reached.");
+}
+
 void commandhandler() {
-	usercommand[USERCOMMANDSIZE - 1] = '\0';
+	usercommand[MAX_USER_COMMAND_SIZE - 1] = '\0';
 	putchar('\n');
 	// printf(reinterpret_cast<char*>(usercommand));
 	char** cmd = split(usercommand);
 	if (backspacecount != 0) {
-		if (cmd[0] && strcmp(cmd[0], "echo") == 0) {
-			for(int i = 1; i < token_count; ++i) {
+		if (cmd[0] && strcmp(cmd[0], "help") == 0) {
+			printf("Serif's kernel build 18.\n\n");
+			printf("Available commands:\n\n");
+			printf("echo [STRING] - Print text to the standard output.\n");
+			printf("ls - List directory contents.\n");
+			printf("read [FILE_NAME] - Print file content.\n");
+			printf("create [FILE/FILES] - Create one or more files.\n");
+			printf("write [FILE] [CONTENT] - Write a file or change content.\n");
+			printf("rm [FILE] - Removes a file.\n");
+			printf("clear - Clear screen.\n");
+		} else if (
+			cmd[0] && strcmp(cmd[0], "echo") == 0 ||
+			cmd[0] && strcmp(cmd[0], "print") == 0
+		) {
+			for (int i = 1; i < token_count; ++i) {
 				printf(cmd[i]);
 				putchar(' ');
 			}
-		} else if (cmd[0] && strcmp(cmd[0], "cd") == 0) {
-			printf("File system does not exist.");
-		} else if (cmd[0] && strcmp(cmd[0], "clear") == 0) {
+		} else if (
+			cmd[0] && strcmp(cmd[0], "cd") == 0 ||
+			cmd[0] && strcmp(cmd[0], "mkdir") == 0 ||
+			cmd[0] && strcmp(cmd[0], "rmdir") == 0
+		) {
+			printf("File system does not support directories.");
+		} else if (
+			cmd[0] && strcmp(cmd[0], "ls") == 0 ||
+			cmd[0] && strcmp(cmd[0], "list") == 0 ||
+			cmd[0] && strcmp(cmd[0], "dir") == 0
+		) {
+			for (int i = 0; i < root->filecount; i++) {
+				printf(root->files[i].name);
+				putchar('\n');
+			}
+		} else if (
+			cmd[0] && strcmp(cmd[0], "read") == 0 ||
+			cmd[0] && strcmp(cmd[0], "cat") == 0
+		) {
+			if (token_count > 1) {
+				if (length(cmd[1]) > 0) {
+					File* target = findFile(root, cmd[1]);
+					if (target != 0) {
+						printf(target->data);
+					} else { _errorFilenotfound(cmd[1]); }
+				} else { _errorUnabletonothing("read"); }
+			} else { _errorUnabletonothing("read"); }
+		} else if (
+			cmd[0] && strcmp(cmd[0], "create") == 0 ||
+			cmd[0] && strcmp(cmd[0], "touch") == 0
+		) {
+			int writedfilescounter = 0;
+			for (int i = 1; i < token_count; ++i) {
+				if (root->filecount < MAX_FILE_COUNT) {
+					if (length(cmd[i]) > 0) {
+						writeFile(root, cmd[i], "");
+						writedfilescounter++;
+					} else {
+						printf("Cannot create null named files.\n");
+					}
+				} else { _errorFilelimit(cmd[i]); }
+			}
+			if (writedfilescounter <= 0) {
+				_errorUnabletonothing("create");
+			}
+		} else if (cmd[0] && strcmp(cmd[0], "write") == 0) {
+			if (root->filecount < MAX_FILE_COUNT) {
+				if (token_count > 1) {
+					if (length(cmd[1]) > 0) {
+						if (token_count > 2) {
+							if (length(cmd[2]) > 0) {
+								char content[MAX_FILE_SIZE];
+								int k = 0;
+								for (int i = 0; i < MAX_FILE_SIZE; ++i) {
+									content[i] = '\0';
+								}
+								writeFile(root, cmd[1], content);
+								for (int i = 2; i < token_count; ++i) {
+									for (int j = 0; j < length(cmd[i]); ++j) {
+										content[k] = cmd[i][j];
+										k++;
+									}
+									content[k] = ' ';
+									k++;
+								}
+								writeFile(root, cmd[1], content);
+							} else { writeFile(root, cmd[1], ""); }
+						} else { writeFile(root, cmd[1], ""); }
+					} else { _errorUnabletonothing("write"); }
+				} else { _errorUnabletonothing("write"); }
+			} else { _errorFilelimit(cmd[1]); }
+		} else if (
+			cmd[0] && strcmp(cmd[0], "rm") == 0 ||
+			cmd[0] && strcmp(cmd[0], "del") == 0
+		) {
+			if (removeFile(root, cmd[1]) != 0) { _errorFilenotfound(cmd[1]); }
+		} else if (
+			cmd[0] && strcmp(cmd[0], "clear") == 0 ||
+			cmd[0] && strcmp(cmd[0], "clean") == 0 ||
+			cmd[0] && strcmp(cmd[0], "clr") == 0 ||
+			cmd[0] && strcmp(cmd[0], "cln") == 0 ||
+			cmd[0] && strcmp(cmd[0], "cls") == 0
+		) {
 			clear();
 		} else {
-			printf(cmd[0]);
-			printf(" not found.");
+			if (token_count > 0) {
+				if (length(cmd[0]) > 0) {
+					_errorCommandnotfound(cmd[0]);
+				}
+			}
 		}
 	}
-	for (int i = 0; i < USERCOMMANDSIZE; ++i) {
+	for (int i = 0; i < MAX_USER_COMMAND_SIZE; ++i) {
 		usercommand[i] = '\0';
 	}
 	backspacecount = 0;
@@ -268,16 +606,23 @@ extern "C" void _kernel_main(void* multiboot_structure, unsigned int magicnumber
 	outb(0x3D5, 0x20);
 	clear();
 	set_cursor(0, 0);
-	printf("Serif's Kernel Build 17, booted successfully.\n");
+	initDirectory(root);
+	createFile(root, "readme.txt", "Welcome to Serif's kernel (Build 18), thanks for trying!\n\n Whats new from build 18?\n\n- Shell prompt fixes.\n- Added shell prompt pointer.\n- Added process error handler.\n- New simple help page. (see with 'help' command)\n- Added new file system commands.\n- Added single level file system.\n");
+	printf("Serif's Kernel Build 18, booted successfully.\n");
 	printf("Welcome!\n\n");
+	printf("Type 'help' for learn basic commands.\n\n");
 	printf(promptheader);
+	loadBackcolor();
+	loadCursor();
 	while(1) {
 		unsigned char pressedkey = waitKey();
-		if (pressedkey != 0 && length(usercommand) < (USERCOMMANDSIZE - 1)) {
+		if (pressedkey != 0 && ulength(usercommand) < (MAX_USER_COMMAND_SIZE - 1)) {
 			pushchar(usercommand, pressedkey);
 			putchar(pressedkey);
 			backspacecount++;
 		}
+		loadBackcolor();
+		loadCursor();
 	}
 	while(1);
 }
