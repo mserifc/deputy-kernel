@@ -433,6 +433,19 @@ void kernel_main(void) {
         );
     }
 
+    // * Colorful graphic display test
+    if (true) {
+        display_graphic_switch();
+        uint8_t color = 0;
+        while (true) {
+            display_graphic_fillRect(0, 0, 320, 200, color);
+            if (color >= 255) {
+                color = 0;
+            } else { color++; }
+            sleep(1);
+        }
+    }
+
     // Loading file system session from disk
     // puts("Loading file system session from disk...");
     // if (ramfs_load() == -1) {
@@ -443,8 +456,8 @@ void kernel_main(void) {
     // * Built-in kernel shell
     if (true) {
         puts("Unable to run user shell, switching to built-in kernel shell.\n");
-        ramfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 27", MEMORY_BLOCKSIZE);
-        ramfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 27, booted successfully.", MEMORY_BLOCKSIZE);
+        ramfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 28", MEMORY_BLOCKSIZE);
+        ramfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 28, booted successfully.", MEMORY_BLOCKSIZE);
         ramfs_writeFile("system", "readme.txt", "Thanks for using my kernel ;)", MEMORY_BLOCKSIZE);
         strcpy(path, "/");
         char* header;
@@ -530,7 +543,7 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
     puts("---- Initializing Ended ----\n");
     putchar('\n');
 
-    puts("Sheriff Kernel Build 27, booted successfully.\n");    // Print kernel boot success message and build version
+    puts("Sheriff Kernel Build 28, booted successfully.\n");    // Print kernel boot success message and build version
     // * Multitasking system test
     if (false) {
         printf("%s\n", memory_report());

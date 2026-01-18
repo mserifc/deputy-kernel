@@ -39,3 +39,8 @@ void display_disablecursor();                           // Disable the cursor (h
 void display_putcursor(int ptr);                        // Set the cursor to a specific screen position (pointer)
 size_t display_getcursor();                             // Get the current position of the cursor
 void display_init();                                    // Initialize display driver
+
+void display_graphic_switch();
+uint8_t* display_graphic_getFrameBufferSegment();
+void display_graphic_putPixel(uint32_t x, uint32_t y, uint8_t c);
+void display_graphic_fillRect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t c);

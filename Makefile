@@ -46,6 +46,7 @@ OBJECTS = \
 	$(BUILD_DIR)/platform/i386/interrupt_stubs.o \
 	\
 	$(BUILD_DIR)/drivers/display.o \
+	$(BUILD_DIR)/drivers/graphic.o \
 	$(BUILD_DIR)/drivers/keyboard.o \
 	$(BUILD_DIR)/drivers/disk.o \
 	\
