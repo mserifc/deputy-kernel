@@ -16,7 +16,9 @@ const uint8_t KeyboardKeyscanTable[216] = {
     '2', '3', '0', '.',  0 ,  0 ,  0 ,  0 , // 0x50 - 0x57
 };
 
-const uint8_t KeyboardShiftscanTable[(sizeof(KeyboardKeyscanTable) / sizeof(KeyboardKeyscanTable[0]))] = {
+const uint8_t KeyboardShiftscanTable[(
+    sizeof(KeyboardKeyscanTable) /
+    sizeof(KeyboardKeyscanTable[0]))] = {
      0 ,  0 , '!', '@', '#', '$', '%', '^', // 0x00 - 0x07
     '&', '*', '(', ')', '_', '+',  0 ,  0 , // 0x08 - 0x0F
     'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', // 0x10 - 0x17
@@ -57,7 +59,8 @@ char keyboard_scankey() {
     ) {
         return (char)input;
     }
-    if (input < (sizeof(KeyboardKeyscanTable) / sizeof(KeyboardKeyscanTable[0]))) {
+    if (input < (sizeof(KeyboardKeyscanTable) /
+        sizeof(KeyboardKeyscanTable[0]))) {
         if (!KeyboardShiftstate) {
             return (char)KeyboardKeyscanTable[input];
         } else if (KeyboardShiftstate) {

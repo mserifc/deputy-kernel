@@ -93,6 +93,23 @@ int* splitdigits(int num) {
     return IntDigits;
 }
 
+void* memset(void* ptr, char value, size_t num) {
+    uint8_t* point = ptr;
+    for (size_t i = 0; i < num; i++) {
+        point[i] = (uint8_t)value;
+    }
+    return ptr;
+}
+
+void* memcpy(void* dest, const void* src, size_t num) {
+    uint8_t* destination = dest;
+    const uint8_t* source = src;
+    for (size_t i = 0; i < num; i++) {
+        destination[i] = source[i];
+    }
+    return dest;
+}
+
 char* strreset(char* str) {
     for (int i = 0; i != '\0'; ++i) {
         str[i] = '\0';
@@ -125,6 +142,62 @@ int strcmp(const char* str1, const char* str2) {
 		str2++;
 	}
 	return *(unsigned char*)str1 - *(unsigned char*)str2;
+}
+
+int snprintf(char* buffer, size_t size, char* format, ...) {
+    va_list args;
+    int written = 0;
+    va_start(args, format);
+    for (int i = 0; format[i] != '\0' && written < size - 1; ++i) {
+        if (format[i] == '%') {
+            i++;
+            if (format[i] == '\0') break;
+            switch (format[i]) {
+                case 'd': {
+                    int num = va_arg(args, int);
+                    char* numStr = itoa(num);
+                    for (int j = 0; numStr[j] != '\0' && written < size - 1; j++, written++) {
+                        buffer[written] = numStr[j];
+                    }
+                    break;
+                }
+                case 'x': {
+                    uint32_t hex = va_arg(args, uint32_t);
+                    char* hexStr = xtoa(hex);
+                    for (int j = 0; hexStr[j] != '\0' && written < size - 1; j++, written++) {
+                        buffer[written] = hexStr[j];
+                    }
+                    break;
+                }
+                case 'c': {
+                    int chr = va_arg(args, int);
+                    if (written < size - 1) {
+                        buffer[written++] = (char)chr;
+                    }
+                    break;
+                }
+                case 's': {
+                    char* str = va_arg(args, char*);
+                    for (int j = 0; str[j] != '\0' && written < size - 1; j++, written++) {
+                        buffer[written] = str[j];
+                    }
+                    break;
+                }
+                default: {
+                    buffer[written++] = '%';
+                    if (written < size - 1) {
+                        buffer[written++] = format[i];
+                    }
+                    break;
+                }
+            }
+        } else {
+            buffer[written++] = format[i];
+        }
+    }
+    buffer[written] = '\0';
+    va_end(args);
+    return written;
 }
 
 int atoi(const char* str) {
@@ -171,28 +244,6 @@ char* itoa(int num) {
             toASCIIresult[i] = (num % 10) + '0';
             num /= 10;
         }
-    }
-    return toASCIIresult;
-}
-
-char* itos(int num) {
-    strreset(toASCIIresult);
-    splitdigits(num);
-    for (int i = 0; i < IntDigitCount; ++i) {
-        char result = 0;
-        switch (IntDigits[i]) {
-            case 0: { result = '0'; break; }
-            case 1: { result = '1'; break; }
-            case 2: { result = '2'; break; }
-            case 3: { result = '3'; break; }
-            case 4: { result = '4'; break; }
-            case 5: { result = '5'; break; }
-            case 6: { result = '6'; break; }
-            case 7: { result = '7'; break; }
-            case 8: { result = '8'; break; }
-            case 9: { result = '9'; break; }
-        }
-        toASCIIresult[i] = result;
     }
     return toASCIIresult;
 }
@@ -264,7 +315,6 @@ void printf(char* format, ...) {
                 }
                 case 'x': {
                     uint32_t hex = va_arg(args, uint32_t);
-                    puts("0x");
                     puts(xtoa(hex));
                     break;
                 }

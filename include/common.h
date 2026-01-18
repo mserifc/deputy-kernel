@@ -29,14 +29,17 @@ bool isdigit(char chr);
 char** split(char* str);
 int* splitdigits(int num);
 
+void* memset(void* ptr, char value, size_t num);
+void* memcpy(void* dest, const void* src, size_t num);
+
 char* strreset(char* str);
 int strlen(char* str);
 char* strcpy(char* dest, const char* src);
 int strcmp(const char* str1, const char* str2);
+int snprintf(char* buffer, size_t size, char* format, ...);
 
 int atoi(const char* str);
 char* itoa(int num);
-char* itos(int num);
 char* xtoa(uint32_t num);
 
 void putchar(char chr);

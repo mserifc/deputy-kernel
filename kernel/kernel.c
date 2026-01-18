@@ -1,3 +1,4 @@
+#include "kernel.h"
 #include "types.h"
 #include "port.h"
 #include "display.h"
@@ -26,8 +27,12 @@ Keyboard keyboard = {
     keyboard_scankey
 };
 
-void _kernel_main();
-void _kernel_error(char* reason);
+Memory memory = {
+    memory_init,
+    memory_allocate,
+    memory_free,
+    memory_report
+};
 
 int command_handler(char* command) {
     if (strlen(command) <= 0) {
@@ -51,8 +56,8 @@ int command_handler(char* command) {
             display.clear();
             setCursorLocation(0);
         } else if (argv[0] && strcmp(argv[0], "devtools") == 0) {
-            if (argv[1] && strcmp(argv[1], "self_kill") == 0) {
-                _kernel_error("INTENTIONAL_BAD_BEHAVIOR");
+            if (argv[1] && strcmp(argv[1], "self_destroy") == 0) {
+                _kernel_panic("Manually triggered");
             } else {
                 printf("Unknown developer tool.\n");
             }
@@ -66,29 +71,31 @@ int command_handler(char* command) {
     return 0;
 }
 
-void _kernel_error(char* reason) {
-    display.setBackgroundColor(COLOR_BLUE);
-    display.reload();
-    display.setTextColor(COLOR_LIGHT_RED);
-    printf("Critical error: %s", reason);
-    while(1);
-}
-
 void _kernel_main() {
-    port.outb(0x3D4, 0x0A);
-    port.outb(0x3D5, 0x20);
-    display.clear();
-    puts("Serif's Kernel Build 21, booted successfully!\n");
-    printf("My name is %s, thanks for trying!\n", "M. Serif C.");
-    printf("I was born in %d, :D\n", 2009);
-    printf("This kernel starts at %x, i guess... <:D\n", 0x14F0D1);
-    printf("So I am %s and thats my kernel, i was born in %d, i guess my kernel start at %x, thats it! Thanks for trying! :)\n", "M. Serif C.", 2009, 0x14f0d1);
-    printf("The kernel loaded %%100\n");
     puts("Welcome!\n");
+    char* my_data = (char*)memory.allocate();
+    // strcpy(my_data, "Hello, World! What's up?");
+    snprintf(my_data, 4096, "Hello, %s!", "World");
+    printf("My data: %s\n", my_data);
+    printf("Memory usage: %s\n", memory.report());
+    memory.free(my_data);
+    printf("Allocated memory freed.\n");
+    printf("Memory usage: %s\n", memory.report());
+    puts("Unable to run user shell, switching to built-in kernel shell.\n");
     while (1) {
         char* prompt = scanf("# ");
         putchar('\n');
+        if (prompt && strcmp(prompt, "exit") == 0) { break; }
         if (command_handler(prompt) == -1) { /* Handle error */ }
     }
-    while(1);
+    _kernel_panic("No processes to execute");
+}
+
+void _kernel_init() {
+    port.outb(0x3D4, 0x0A);
+    port.outb(0x3D5, 0x20);
+    display.clear();
+    memory_init();
+    puts("Serif's Kernel Build 22, booted successfully!\n");
+    _kernel_main();
 }

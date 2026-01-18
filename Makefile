@@ -1,16 +1,15 @@
-CC = gcc
-AS = nasm
-LD = /usr/local/opt/llvm/bin/ld.lld
-
-CC_FLAGS = -m32 \
-	--target=i386-unknown-linux-gnu \
-	-fno-use-cxa-atexit \
+CC = i386-elf-gcc
+AS = i386-elf-as
+LD = i386-elf-ld
+ 
+CC_FLAGS = \
+	-m32 \
 	-nostdlib \
 	-fno-builtin \
-	-fno-rtti \
 	-fno-exceptions \
+	-fno-leading-underscore \
 	-I include
-AS_FLAGS = -f elf32
+AS_FLAGS = --32
 LD_FLAGS = -melf_i386
 
 SRC_DIR = kernel
@@ -24,6 +23,7 @@ OBJECTS = \
 	$(BUILD_DIR)/port.o \
 	$(BUILD_DIR)/display.o \
 	$(BUILD_DIR)/keyboard.o \
+	$(BUILD_DIR)/memory.o \
 	$(BUILD_DIR)/common.o
 
 EMULATOR = qemu-system-i386

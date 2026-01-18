@@ -1,31 +1,27 @@
-%define MAGIC 0x1BADB002
-%define FLAGS (1<<0 | 1<<1)
-%define CHECKSUM -(MAGIC + FLAGS)
+.set MAGIC, 0x1BADB002
+.set FLAGS, (1<<0 | 1<<1)
+.set CHECKSUM, -(MAGIC + FLAGS)
 
-section .multiboot
-    dd MAGIC
-    dd FLAGS
-    dd CHECKSUM
+.section .multiboot
+    .long MAGIC
+    .long FLAGS
+    .long CHECKSUM
 
-section .text
-    extern _kernel_main
-    global _kernel_entry
+.section .text
+    .extern _kernel_init
+    .global _kernel_entry
 
 _kernel_entry:
-    mov esp, _kernel_stack
-
-    push eax
-    push ebx
-    
-    cli
-
-    jmp _kernel_main
+    mov $_kernel_stack, %esp
+    push %eax
+    push %ebx
+    call _kernel_init
 
 _halt:
     cli
     hlt
     jmp _halt
 
-section .bss
-    resb 2*1024*1024
+.section .bss
+    .space 2*1024*1024
 _kernel_stack:
