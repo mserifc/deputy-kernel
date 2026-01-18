@@ -144,12 +144,13 @@ typedef unsigned short key_t;       // Key type for represent key values
 
 // * Public variables
 
-extern bool keyboard_KeyState[256];
+extern const char keyboard_Layout_US[128][2];   // United States keyboard layout
+extern bool keyboard_KeyState[256];             // Keyboard key states
 
 // * Public functions
 
-char    keyboard_tochar(key_t key);     // Convert keycode to character
-key_t   keyboard_waitkey();             // Wait for a key input
-char    keyboard_waitchar();            // Wait for a character input
+char    keyboard_tochar(key_t key);             // Convert keycode to character
+key_t   keyboard_waitkey();                     // Wait for a key input
+char    keyboard_waitchar();                    // Wait for a character input
 
-void    keyboard_process();             // Main keyboard controller process for handle key inputs
+void    keyboard_process();                     // Main keyboard controller process for handle key inputs

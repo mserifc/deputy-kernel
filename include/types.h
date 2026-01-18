@@ -33,7 +33,8 @@ typedef unsigned char bool;     // Boolean type for represent true/false values
 
 #define NULL ((void*)0)     // Null pointer for indicating no valid memory address
 
-#define STRING(x) #x    // Macro for convert macro name to ASCII string
+#define STRING(x) #x            // Macro for convert macro name to ASCII string
+#define NUMBER(x) STRING(x)     // Macro for context number value of macro to ASCII string
 #define ALIGN(x, a) (((x) + ((a)-1)) & ~((a)-1))
 #define NAKED __attribute__((naked))
 #define PACKED __attribute__((packed))

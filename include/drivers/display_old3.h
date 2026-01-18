@@ -10,15 +10,15 @@
 #define DISPLAY_GUIVIDEOMEMORY          0xA0000 // GUI video memory base address
 
 #define DISPLAY_CLIWIDTH                80      // CLI display width
-#define DISPLAY_CLIHEIGHT               25      // CLI display height
+#define DISPLAY_CLIHEIGHT               30      // CLI display height
 
 #define DISPLAY_GUIWIDTH                640     // GUI display width
 #define DISPLAY_GUIHEIGHT               480     // GUI display height
 
-#define DISPLAY_FONTWIDTH               8       // Display font width
-#define DISPLAY_FONTHEIGHT              16      // Display font height
+#define FONT_WIDTH                      8       // Font width
+#define FONT_HEIGHT                     16      // Font height
 
-#define DISPLAY_PLANES                  4       // GUI display plane count
+#define DISPLAY_PLANES                  3       // GUI display plane count
 
 #define DISPLAY_MISC_PORT               0x3C2   // Miscellaneous output port
 #define DISPLAY_CRTC_INDEXPORT          0x3D4   // CRTC (Cathode Ray Tube Controller) index port
@@ -58,44 +58,18 @@
 // Default text color for CLI display
 #define DISPLAY_CLIDEFAULT_FOREGROUND   DISPLAY_CLICOLOR_LIGHTGRAY
 
-// * Structures
-
-// Structure of BMP image information
-typedef struct {
-    uint32_t size;
-    int32_t width;
-    int32_t height;
-    uint16_t planes;
-    uint16_t bitCount;
-    uint32_t compression;
-    uint32_t sizeImage;
-    int32_t XPelsPerMeter;
-    int32_t YPelsPerMeter;
-    uint32_t clrUsed;
-    uint32_t clrImportant;
-} display_BMPInfo_t;
-
-// Structure of 24 bit (RGB) pixel
-typedef struct {
-    uint8_t b;
-    uint8_t g;
-    uint8_t r;
-} display_Pixel24_t;
-
 // * Public functions
 
 void    display_clear();                                        // Clear the entire screen (CLI/GUI)
+void    display_scrolldown(int px);                             // Scroll down the entire screen (GUI)
 
 void    display_putchar(char chr, int ptr);                     // Print a single character at a specific position (CLI/GUI)
-char    display_getchar(int ptr);                               // Get the character at a specific screen position (CLI/GUI)
 void    display_putcursor(int ptr);                             // Set the cursor to a specific screen position (CLI)
-int     display_getcursor();                                    // Get the current position of the cursor (CLI)
 
-void    display_putpixel(int x, int y, uint8_t c);              // Draw a pixel to specific position on the screen (GUI)
-void    display_fillrect(int x, int y, int w, int h, uint8_t c);// Draw a rectangle to specific position on the screen (GUI)
-
-uint8_t display_convert24to4(uint8_t r, uint8_t g, uint8_t b);  // Convert 24 bit color to 4 bit
-void    display_renderBMP(void* image, int x, int y);           // Render specific BMP image to screen (GUI)
+void    display_setcolor(int s, uint8_t c);                     // Set current draw color
+void    display_putpixel(int x, int y);                         // Draw a pixel to specific position on the screen (GUI)
+void    display_rempixel(int x, int y);                         // Remove a pixel on a specific position on the screen (GUI)
+void    display_fillrect(int x, int y, int w, int h);           // Draw a rectangle to specific position on the screen (GUI)
+void display_renderBMP(void* image, int x, int y);
 
 void    display_init();                                         // Initialize the display driver
-void    display_process();                                      // Main display driver process for keep display up to date

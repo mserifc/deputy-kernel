@@ -11,27 +11,6 @@ size_t syscall_Table[SYSCALL_ENTCOUNT];
  * @brief Handler for system call
  */
 void syscall_handler(void) {
-    // asm volatile (
-    //     "pop %eax\t\n"
-    //     "pop %eax\t\n"
-    //     "pop %eax\t\n"
-    //     "pop %eax\t\n"
-    //     "pop %eax\t\n"
-    //     "pop %eax\t\n"
-    //     "pop %eax\t\n"
-    //     "pop %eax\t\n"
-    //     "jmp %eax"
-    // );
-    // asm volatile ("iret");
-    // asm volatile (
-    //     "pusha\t\n"
-    //     "pop %ebx\t\n"
-    //     "pop %eax\t\n"
-    // );
-    // uint32_t eax; asm volatile ("mov %%eax, %0" : "=r"(eax));
-    // asm volatile ("jmp *%0" : : "r"(0x1025E7));
-    // kernel_panic("0x%x", eax);
-    // asm volatile ("hlt");
     uint32_t eax, ebx, ecx, edx, esi, edi;
     asm volatile (
         "mov %%eax, %0\n\t"
@@ -79,8 +58,12 @@ void syscall_init() {
     for (int i = 0; i < SYSCALL_ENTCOUNT; ++i) { syscall_Table[i] = 0x0000; }
     interrupts_setGate(SYSCALL_INTVECTOR, (size_t)syscall_handler);
 
+    interrupts_setGate(SYS_YIELD, (size_t)yield);
+
     syscall_Table[SYS_EXIT] = (size_t)exit;
     syscall_Table[SYS_SPAWN] = (size_t)spawn;
     syscall_Table[SYS_READ] = (size_t)read;
     syscall_Table[SYS_WRITE] = (size_t)write;
+    syscall_Table[SYS_OPEN] = (size_t)open;
+    syscall_Table[SYS_CLOSE] = (size_t)close;
 }

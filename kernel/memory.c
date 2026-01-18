@@ -72,15 +72,15 @@ void* malloc(size_t size) {
 /**
  * @brief Function for allocate cleared memory
  * 
- * @param size Size of memory block
+ * @param nmemb Number of members
+ * @param size Size of members
  * 
  * @return Address of cleared allocated memory block (If not found, returns null)
  * 
- * ! NOTE: This function will be designed from scratch
  */
-void* calloc(size_t size) {
-    void* blk = malloc(size);
-    if (blk == NULL) { return NULL; }
+void* calloc(size_t nmemb, size_t size) {
+    size_t n = nmemb * size; if (n > UINT_MAX) { return NULL; }
+    void* blk = malloc(n); if (blk == NULL) { return NULL; }
     fill(blk, 0, memory_blkInfo(blk)->count * MEMORY_BLOCKSIZE);
     return blk;
 }
@@ -132,8 +132,8 @@ void free(void* allocated) {
  * @param size Size of allocable memory field
  */
 void memory_init(uint64_t size) {
-    if (size > UINT_MAX) { kernel_panic("64bit not supported"); }
-    if (size < MEMORY_MINIMUMSIZE) { kernel_panic("Not enough memory detected"); }
+    if (size > UINT_MAX) { PANIC("64bit not supported"); }
+    if (size < MEMORY_MINIMUMSIZE) { PANIC("Not enough memory detected"); }
     memory_Space = (void*)((size_t)&kernel_start + kernel_size() + 1);
     // ! Use low size for save power while debug and tests
     memory_Size = 4*1024*1024;//(size_t)size;

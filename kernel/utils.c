@@ -9,14 +9,23 @@ tokens_t utils_Tokens;
 // String buffer for function results
 char utils_StringBuffer[64];
 
+// // Text memory for CLI (Command Line Interface) display
+// char utils_TextMemory[DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT];
+
 // Cursor location in CLI (Command Line Interface) display
-int utils_CursorLocation = DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1);
+int utils_CursorLocation = 0;//DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1);
 
 // Buffer for keep user prompt input
 char utils_PromptBuffer[UTILS_PROMPTBUFFER_LENGTH];
 int utils_PromptPointer = 0;    // Prompt pointer
 
 // Private functions
+
+uint64_t utils_rdtsc() {
+    uint32_t low, high;
+    asm volatile ("rdtsc" : "=a"(low), "=d"(high));
+    return ((uint64_t)high << 32) | low;
+}
 
 // Function for convert binary-coded decimal to decimal
 uint8_t utils_bcd2dec(uint8_t bcd) { return (bcd & 0x0F) + ((bcd >> 4) * 10); }
@@ -69,6 +78,31 @@ void utils_scrolldown(int times) {
     }
 }
 
+// Function for convert a seed to a pseudo-random 32-bit integer using XORShift algorithm
+uint32_t xorshift32(uint32_t state) {
+    state ^= state << 21;
+    state ^= state >> 31;
+    state ^= state << 4;
+    return state * 2685821657736338717LL;
+}
+
+// Function for encrypt or decrypt data with a key
+void xorcipher(char* input, char* key) {
+    size_t input_len = length(input);
+    size_t key_len = length(key);
+    for (size_t i = 0; i < input_len; i++) {
+        input[i] ^= key[i % key_len];
+    }
+}
+
+// Function for hash the given data using FNV-1a hash algorithm
+uint32_t fnv1ahash(uint8_t* data, size_t len) {
+    uint32_t hash = 0x811C9DC5;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= data[i]; hash *= 0x01000193;
+    } return hash;
+}
+
 // Public functions
 
 /**
@@ -91,12 +125,13 @@ date_t date() {
 /**
  * @brief Function for introduce a delay (based on CPU speed)
  * 
- * @param count Specific loop count
+ * @param ms Milliseconds
  */
-void delay(uint32_t count) {
-    for (uint32_t i = 0; i < count; ++i) {
-        asm volatile ("nop");
-    }
+void delay(uint32_t ms) {
+    extern kernel_CPUInfo_t kernel_CPUInfo;
+    uint64_t time = (kernel_CPUInfo.frequency * ms) / 1024;
+    uint64_t end = time + utils_rdtsc();
+    while (utils_rdtsc() < end) { asm volatile ("nop"); }
 }
 
 /**
@@ -105,18 +140,19 @@ void delay(uint32_t count) {
  * @param sec Seconds
  */
 void sleep(uint32_t sec) {
+    date_t current, start = date();
     uint32_t targetTime =
-        (date().day * 24 * 60 * 60) +
-        (date().hour * 60 * 60) +
-        (date().min * 60) +
-        date().sec + sec;
+        (start.day * 24 * 60 * 60) +
+        (start.hour * 60 * 60) +
+        (start.min * 60) +
+        start.sec + sec;
     while (true) {
-        if (
-            (date().day * 24 * 60 * 60) +
-            (date().hour * 60 * 60) +
-            (date().min * 60) +
-            date().sec >= targetTime
-        ) { return; }
+        current = date(); if (
+            (current.day * 24 * 60 * 60) +
+            (current.hour * 60 * 60) +
+            (current.min * 60) +
+            current.sec >= targetTime
+        ) { return; } yield();
     }
 }
 
@@ -232,7 +268,7 @@ int length(char* str) {
  * 
  * @return Tokens
  */
-tokens_t split(char* str, char deli) {
+tokens_t* split(char* str, char deli) {
     for (int i = 0; i < UTILS_SPLIT_MAXTOKENCOUNT; ++i) {
         for (int j = 0; j < UTILS_SPLIT_MAXTOKENLENGTH; ++j) {
             utils_Tokens.v[i][j] = '\0';
@@ -260,7 +296,7 @@ tokens_t split(char* str, char deli) {
         utils_Tokens.v[utils_Tokens.c][c] = '\0';
         utils_Tokens.c++;
     }
-    return utils_Tokens;
+    return &utils_Tokens;
 }
 
 /**
@@ -382,6 +418,7 @@ void putcursor(int ptr) {
  * @param chr Specific character to print
  */
 void putchar(char chr) {
+    if (chr == '\0') { return; }
     if (chr == '\n') {
         utils_CursorLocation = (utils_CursorLocation / DISPLAY_CLIWIDTH + 1) * DISPLAY_CLIWIDTH;
     } else if (chr == '\t') {
@@ -456,10 +493,8 @@ void printf(char* format, ...) {
         } else if (format[i] == '\n') {
             utils_CursorLocation = (utils_CursorLocation / DISPLAY_CLIWIDTH + 1) * DISPLAY_CLIWIDTH;
         } else if (format[i] == '\t') {
-            for (int j = 0; j < UTILS_TABLENGTH; ++j) {
-                display_putchar(' ', utils_CursorLocation);
-                utils_CursorLocation++;
-            }
+            int tablen = UTILS_TABLENGTH - (getcursor() % UTILS_TABLENGTH);
+            for (int i = 0; i < tablen; ++i) { putchar(' '); }
         } else {
             display_putchar(format[i], utils_CursorLocation);
             utils_CursorLocation++;
@@ -478,20 +513,20 @@ void printf(char* format, ...) {
  * 
  * @param buffer Specific buffer address to write output
  * @param size Limit for output
- * @param format Formatted string
+ * @param fmt Formatted string
  * @param ... Arguments in formatted string
  * 
  * @return Returns size of output (without limit)
  */
-int snprintf(char* buffer, size_t size, char* format, ...) {
+int snprintf(char* buffer, size_t size, char* fmt, ...) {
     va_list args;
     int written = 0;
-    va_start(args, format);
-    for (int i = 0; format[i] != '\0' && written < size - 1; ++i) {
-        if (format[i] == '%') {
+    va_start(args, fmt);
+    for (int i = 0; fmt[i] != '\0' && written < size - 1; ++i) {
+        if (fmt[i] == '%') {
             i++;
-            if (format[i] == '\0') break;
-            switch (format[i]) {
+            if (fmt[i] == '\0') break;
+            switch (fmt[i]) {
                 case 'd': {
                     int num = va_arg(args, int);
                     char* numStr = convert_itoa(num);
@@ -525,13 +560,13 @@ int snprintf(char* buffer, size_t size, char* format, ...) {
                 default: {
                     buffer[written++] = '%';
                     if (written < size - 1) {
-                        buffer[written++] = format[i];
+                        buffer[written++] = fmt[i];
                     }
                     break;
                 }
             }
         } else {
-            buffer[written++] = format[i];
+            buffer[written++] = fmt[i];
         }
     }
     buffer[written] = '\0';
@@ -550,32 +585,42 @@ char* prompt(char* header) {
     for (int i = 0; i < UTILS_PROMPTBUFFER_LENGTH; ++i) {
         utils_PromptBuffer[i] = '\0';
     }
+    char* passwordHeader = "Password: ";
+    bool password = ncompare(header, passwordHeader, length(passwordHeader)) ? false : true;
     utils_PromptPointer = 0;
     printf(header);
     display_putcursor(utils_CursorLocation);
+    char* input = (char*)malloc(UTILS_PROMPTBUFFER_LENGTH);
+    if (input == NULL) { return utils_PromptBuffer; }
     while (1) {
-        char input = keyboard_waitchar();
-        if (input != '\0' && input != '\t') {
-            if (input == '\b') {
-                if (utils_PromptPointer > 0 && length(utils_PromptBuffer) > 0) {
-                    utils_PromptPointer--;
-                    utils_PromptBuffer[utils_PromptPointer] = '\0';
-                    utils_CursorLocation--;
-                    display_putchar('\0', utils_CursorLocation);
+        size_t written = read(STDIN, input, UTILS_PROMPTBUFFER_LENGTH);
+        for (int i = 0; i < written; ++i) {
+            if (input[i] != '\0' && input[i] != '\t') {
+                if (input[i] == '\b') {
+                    if (utils_PromptPointer > 0 && length(utils_PromptBuffer) > 0) {
+                        utils_PromptPointer--;
+                        utils_PromptBuffer[utils_PromptPointer] = '\0';
+                        if (!password) {
+                            utils_CursorLocation--;
+                            display_putchar('\0', utils_CursorLocation);
+                            display_putcursor(utils_CursorLocation);
+                        }
+                    }
+                } else if (input[i] == '\n') {
+                    utils_PromptBuffer[UTILS_PROMPTBUFFER_LENGTH - 1] = '\0';
                     display_putcursor(utils_CursorLocation);
+                    free(input); return utils_PromptBuffer;
+                } else if (utils_PromptPointer < UTILS_PROMPTBUFFER_LENGTH - 1) {
+                    utils_PromptBuffer[utils_PromptPointer] = input[i];
+                    utils_PromptPointer++;
+                    if (!password) {
+                        putchar(input[i]);
+                        display_putcursor(utils_CursorLocation);
+                    }
                 }
-            } else if (input == '\n') {
-                utils_PromptBuffer[UTILS_PROMPTBUFFER_LENGTH - 1] = '\0';
-                display_putcursor(utils_CursorLocation);
-                return utils_PromptBuffer;
-            } else if (utils_PromptPointer < UTILS_PROMPTBUFFER_LENGTH - 1) {
-                utils_PromptBuffer[utils_PromptPointer] = input;
-                utils_PromptPointer++;
-                putchar(input);
-                display_putcursor(utils_CursorLocation);
             }
-        }
-        display_putcursor(utils_CursorLocation);
+            display_putcursor(utils_CursorLocation);
+        } yield();
     }
     display_putcursor(utils_CursorLocation);
 }

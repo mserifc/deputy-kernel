@@ -1,23 +1,17 @@
-#include "drivers/display.h"
+#include "drivers/display_old3.h"
 #include "assets/font.h"
 
 // Display driver initialization status
 bool display_Initialized = false;
 
-// Display change flag
-bool display_Changed = false;
+// Current display draw color
+uint8_t display_CurrentColor = 0;
 
 // CLI video memory base address
 uint16_t* display_CLIVideoMemory = (uint16_t*)DISPLAY_CLIVIDEOMEMORY;
 
 // GUI video memory base address
 uint8_t* display_GUIVideoMemory = (uint8_t*)DISPLAY_GUIVIDEOMEMORY;
-
-// Display text memory
-char display_TextMemory[DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT];
-
-// Display video memory
-uint8_t display_VideoMemory[DISPLAY_GUIWIDTH * DISPLAY_GUIHEIGHT];
 
 // CLI display background color
 uint8_t display_CLIBackground = DISPLAY_CLIDEFAULT_BACKGROUND;
@@ -34,14 +28,43 @@ void display_clear() {
         for (int i = 0; i < DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT; ++i)
             { display_CLIVideoMemory[i] = (uint16_t)(display_CLIBackground << 4 | display_CLIForeground << 8); }
     } else {
-        for (int i = 0; i < DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT; ++i) { display_TextMemory[i] = 0; }
-        for (int i = 0; i < DISPLAY_GUIWIDTH * DISPLAY_GUIHEIGHT; ++i) { display_VideoMemory[i] = 0; }
-        display_Changed = true;
+        for (int plane = 0; plane < 4; ++plane) {
+            port_outb(0x3C4, 0x02); port_outb(0x3C5, 1 << plane);
+            for (int y = 0; y < DISPLAY_GUIHEIGHT; ++y) {
+                for (int byte = 0; byte < (DISPLAY_GUIWIDTH / 8); ++byte) {
+                    display_GUIVideoMemory[y * 80 + byte] = 0;
+                }
+            }
+        }
     }
 }
 
 /**
- * @brief Function for print a single character at a specific position on the screen (Available in CLI mode)
+ * @brief Function for scroll down the entire screen (Available in GUI mode)
+ * 
+ * @param lines Count of pixel lines to scroll
+ */
+void display_scrolldown(int lines) {
+    if (!display_Initialized || !KERNEL_GRAPHICMODE) return;
+    for (int p = 0; p < DISPLAY_PLANES; ++p) { display_setcolor(p, 0);
+        int ln = p ? 0 : lines;
+        for (int row = 0; row < DISPLAY_GUIHEIGHT - ln; ++row) {
+            for (int byte = 0; byte < (DISPLAY_GUIWIDTH / 8); ++byte) {
+                display_GUIVideoMemory[row * (DISPLAY_GUIWIDTH / 8) + byte] =
+                    display_GUIVideoMemory[(row + ln) * (DISPLAY_GUIWIDTH / 8) + byte];
+            }
+        }
+        for (int row = DISPLAY_GUIHEIGHT - ln; row < DISPLAY_GUIHEIGHT; ++row) {
+            for (int byte = 0; byte < (DISPLAY_GUIWIDTH / 8); ++byte) {
+                display_GUIVideoMemory[row * (DISPLAY_GUIWIDTH / 8) + byte] = 0x00;
+            }
+        }
+    }
+}
+
+
+/**
+ * @brief Function for print a single character at a specific position on the screen (Available in both modes)
  * 
  * @param chr Character to be print
  * @param ptr Specific screen position
@@ -52,33 +75,19 @@ void display_putchar(char chr, int ptr) {
         if (ptr < 0 || DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT <= ptr) { return; }
         display_CLIVideoMemory[ptr] = (uint16_t)(display_CLIBackground << 4 | display_CLIForeground << 8) | chr;
     } else {
-        display_TextMemory[ptr] = chr; display_Changed = true;
-        // int x = (ptr % DISPLAY_CLIWIDTH) * DISPLAY_FONTWIDTH;
-        // int y = (ptr / DISPLAY_CLIWIDTH) * DISPLAY_FONTHEIGHT;
-        // for (int row = 0; row < DISPLAY_FONTHEIGHT; ++row) {
-        //     char row_bits = font8x16[(int)chr][row];
-        //     for (int col = 0; col < DISPLAY_FONTWIDTH; ++col) {
-        //         int bit = (row_bits >> DISPLAY_FONTWIDTH - 1 - col) & 1;
-        //         uint32_t color = bit ? display_CLIForeground : 0x00;
-        //         display_putpixel(x + col, y + row, color);
-        //     }
-        // }
+        int x = (ptr % DISPLAY_CLIWIDTH) * FONT_WIDTH;
+        int y = (ptr / DISPLAY_CLIWIDTH) * FONT_HEIGHT;
+        for (int p = 0; p < DISPLAY_PLANES; ++p) { display_setcolor(p, display_CLIForeground);
+            for (int row = 0; row < FONT_HEIGHT; ++row) {
+                char row_bits = font8x16[(int)chr][row];
+                for (int col = 0; col < FONT_WIDTH; ++col) {
+                    int bit = (row_bits >> FONT_WIDTH - 1 - col) & 1;
+                    if (bit) { display_putpixel(x + col, y + row); }
+                    else { display_rempixel(x + col, y + row); }
+                }
+            }
+        }
     }
-}
-
-/**
- * @brief Function for get the character at a specific screen position on the screen (Available in CLI mode)
- * 
- * @param ptr Specific screen position
- * 
- * @return Character result
- */
-char display_getchar(int ptr) {
-    if (!display_Initialized) { return 0; }
-    if (!KERNEL_GRAPHICMODE) {
-        if (ptr < 0 || DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT <= ptr) { return -1; }
-        return (char)(display_CLIVideoMemory[ptr] & 0xFF);
-    } else { return display_TextMemory[ptr]; }
 }
 
 /**
@@ -98,20 +107,20 @@ void display_putcursor(int ptr) {
 }
 
 /**
- * @brief Function for get current screen position of the cursor (Available in CLI mode)
+ * @brief Function for set color for drawing operations
  * 
- * @return Cursor position on the screen
+ * Usage: for (int p = 0; p < DISPLAY_PLANES; ++p) {
+ *      You can use drawing operations here after using this function in the loop
+ * }
+ * 
+ * @param s Stage of plane
+ * @param c Color
  */
-int display_getcursor() {
-    if (!display_Initialized) { return 0; }
-    if (!KERNEL_GRAPHICMODE) {
-        size_t ptr = 0;
-        port_outb(0x3D4, 0x0F);
-        ptr |= port_inb(0x3D5);
-        port_outb(0x3D4, 0x0E);
-        ptr |= ((size_t)port_inb(0x3D5)) << 8;
-        return ptr;
-    } else { return 0; }
+void display_setcolor(int s, uint8_t c) {
+    if (!display_Initialized || s < 0 || s > 3) { return; }
+    port_outb(0x3C4, 0x02); port_outb(0x3C5, 1 << s);
+    uint8_t out = 0; for (int bit = 0; bit < 8; ++bit) { out |= ((c >> s) & 1) << (7 - bit); }
+    display_CurrentColor = out;
 }
 
 /**
@@ -119,15 +128,31 @@ int display_getcursor() {
  * 
  * @param x Position on X axis
  * @param y Position on Y axis
- * @param c Color of pixel
  */
-void display_putpixel(int x, int y, uint8_t c) {
+void display_putpixel(int x, int y) {
     if (!display_Initialized) { return; }
     if (KERNEL_GRAPHICMODE) {
         if (x < 0 || DISPLAY_GUIWIDTH <= x ||
-            y < 0 || DISPLAY_GUIHEIGHT <= y ||
-            c < 0 || c > 0xF) { return; }
-        display_VideoMemory[y * DISPLAY_GUIWIDTH + x] = c; display_Changed = true;
+            y < 0 || DISPLAY_GUIHEIGHT <= y) { return; }
+        int byte = y * (DISPLAY_GUIWIDTH / 8) + (x / 8); int bit = x % 8;
+        if (display_CurrentColor) { display_GUIVideoMemory[byte] |= (1 << (7 - bit)); }
+        else { display_GUIVideoMemory[byte] &= ~(1 << (7 - bit)); }
+    }
+}
+
+/**
+ * @brief Function for remove a pixel (set black) from specific position on the screen (Available in GUI mode)
+ * 
+ * @param x Position on X axis
+ * @param y Position on Y axis
+ */
+void display_rempixel(int x, int y) {
+    if (!display_Initialized) { return; }
+    if (KERNEL_GRAPHICMODE) {
+        if (x < 0 || DISPLAY_GUIWIDTH <= x ||
+            y < 0 || DISPLAY_GUIHEIGHT <= y) { return; }
+        int byte = y * (DISPLAY_GUIWIDTH / 8) + (x / 8);
+        int bit = x % 8; display_GUIVideoMemory[byte] &= ~(1 << (7 - bit));
     }
 }
 
@@ -138,57 +163,62 @@ void display_putpixel(int x, int y, uint8_t c) {
  * @param y Position on Y axis
  * @param w Width of rectangle
  * @param h Height of rectangle
- * @param c Color of rectangle
  */
-void display_fillrect(int x, int y, int w, int h, uint8_t c) {
+void display_fillrect(int x, int y, int w, int h) {
     if (!display_Initialized) { return; }
     if (KERNEL_GRAPHICMODE) {
-        int posx = x, posy = y, width = w, height = h;
-        if (x < 0) { posx = 0; } if (y < 0) { posy = 0; }
-        if (w >= DISPLAY_GUIWIDTH) { width = DISPLAY_GUIWIDTH; }
-        if (h >= DISPLAY_GUIHEIGHT) { height = DISPLAY_GUIHEIGHT; }
-        for (int i = posy; i < posy + height; ++i) {
-            for (int j = posx; j < posx + width; ++j) {
-                display_VideoMemory[i * DISPLAY_GUIWIDTH + j] = c;
+        for (int i = y; i < y + h; ++i) {
+            for (int j = x; j < x + w; ++j) {
+                int byte = i * (DISPLAY_GUIWIDTH / 8) + (j / 8); int bit = j % 8;
+                if (display_CurrentColor) { display_GUIVideoMemory[byte] |= (1 << (7 - bit)); }
+                else { display_GUIVideoMemory[byte] &= ~(1 << (7 - bit)); }
             }
-        } display_Changed = true;
+        }
     }
 }
 
-/**
- * @brief Function for convert 24 bit color to 4 bit
- * 
- * @param r Red value
- * @param g Green value
- * @param b Blue value
- * 
- * @return 4 bit color result
- */
 uint8_t display_convert24to4(uint8_t r, uint8_t g, uint8_t b) {
-    uint8_t result = 0;
-    if (r > 127) { result |= (1 << 2); }
-    if (g > 127) { result |= (1 << 1); }
-    if (b > 127) { result |= (1 << 0); }
-    // if (r + g + b > (256 * 3) / 2) { result |= (1 << 3); }
-    return result;
+    if (r < 32 && g < 32 && b < 32) return 0x0;  // Black
+    if (r > 192 && g < 64 && b < 64) return 0x4; // Red
+    if (r < 64 && g > 192 && b < 64) return 0x2; // Green
+    if (r < 64 && g < 64 && b > 192) return 0x1; // Blue
+    if (r > 192 && g > 192 && b < 64) return 0xE; // Yellow
+    if (r > 192 && g < 64 && b > 192) return 0x5; // Magenta
+    if (r < 64 && g > 192 && b > 192) return 0x3; // Cyan
+    if (r > 128 && g > 128 && b > 128) return 0x7; // Light Gray
+    return 0x8; // Dark Gray
 }
 
-/**
- * @brief Function for render specific BMP image to screen
- * 
- * @param image BMP image
- * @param x Position on X axis
- * @param y Position on Y axis
- */
 void display_renderBMP(void* image, int x, int y) {
+    struct info {
+        uint32_t size;
+        int32_t width;
+        int32_t height;
+        uint16_t planes;
+        uint16_t bitCount;
+        uint32_t compression;
+        uint32_t sizeImage;
+        int32_t XPelsPerMeter;
+        int32_t YPelsPerMeter;
+        uint32_t clrUsed;
+        uint32_t clrImportant;
+    };
+    struct pixel {
+        uint8_t b;
+        uint8_t g;
+        uint8_t r;
+    };
     void* image_information = image + 14;
     void* image_data = image + 54;
-    display_BMPInfo_t* image_info = image_information;
-    display_Pixel24_t* image_px = image_data;
+    struct info* image_info = image_information;
+    struct pixel* image_px = image_data;
     int n = 0;
     for (int i = image_info->height; i > 0; --i) {
         for (int j = 0; j < image_info->width; ++j) {
-            display_putpixel(x + j, y + i, display_convert24to4(image_px[n].r, image_px[n].g, image_px[n].b)); n++;
+            for (int p = 0; p < DISPLAY_PLANES; ++p) {
+                display_setcolor(p, display_convert24to4(image_px[n].r, image_px[n].g, image_px[n].b));
+                display_putpixel(j, i); n++;
+            }
         }
     }
 }
@@ -199,12 +229,12 @@ void display_renderBMP(void* image, int x, int y) {
 void display_init() {
     if (display_Initialized) { return; }
     if (!KERNEL_GRAPHICMODE) {
-        // display_clear();
+        display_clear();
         port_outb(0x3D4, 0x0A);
         port_outb(0x3D5, (port_inb(0x3D5) & 0xC0) | 14);
         port_outb(0x3D4, 0x0B);
         port_outb(0x3D5, (port_inb(0x3D5) & 0xE0) | 15);
-        // display_putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));
+        display_putcursor(DISPLAY_CLIWIDTH * (DISPLAY_CLIHEIGHT - 1));
     } else {
         uint8_t display_graphic_320x200x256[] = {
             /* MISC */
@@ -277,43 +307,5 @@ void display_init() {
                 }
             }
         }
-        for (int i = 0; i < DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT; ++i) { display_TextMemory[i] = 0; }
-        for (int i = 0; i < DISPLAY_GUIWIDTH * DISPLAY_GUIHEIGHT; ++i) { display_VideoMemory[i] = 0; }
-        display_Changed = true;
     } display_Initialized = true;
-}
-
-/**
- * @brief Main function of VGA display driver process for keep display up to date
- */
-void display_process() {
-    if (!display_Initialized || !KERNEL_GRAPHICMODE) { exit(); return; }
-    while (true) {
-        if (!display_Changed) { yield(); continue; }
-        for (int i = 0; i < DISPLAY_CLIWIDTH * DISPLAY_CLIHEIGHT; ++i) {
-            int x = (i % DISPLAY_CLIWIDTH) * DISPLAY_FONTWIDTH;
-            int y = (i / DISPLAY_CLIWIDTH) * DISPLAY_FONTHEIGHT;
-            for (int row = 0; row < DISPLAY_FONTHEIGHT; ++row) {
-                char row_bits = font8x16[(int)display_TextMemory[i]][row];
-                for (int col = 0; col < DISPLAY_FONTWIDTH; ++col) {
-                    int bit = (row_bits >> DISPLAY_FONTWIDTH - 1 - col) & 1;
-                    uint32_t color = bit ? display_CLIForeground : 0x00;
-                    display_VideoMemory[((y + row) * DISPLAY_GUIWIDTH) + x + col] = color;
-                }
-            }
-        }
-        for (int plane = 0; plane < 4; ++plane) {
-            port_outb(0x3C4, 0x02);
-            port_outb(0x3C5, 1 << plane);
-            for (int y = 0; y < DISPLAY_GUIHEIGHT; ++y) {
-                for (int byte = 0; byte < (DISPLAY_GUIWIDTH / 8); ++byte) {
-                    uint8_t out = 0;
-                    for (int bit = 0; bit < 8; ++bit) {
-                        int x = byte * 8 + bit;
-                        out |= ((display_VideoMemory[y * DISPLAY_GUIWIDTH + x] >> plane) & 1) << (7 - bit);
-                    } display_GUIVideoMemory[y * (DISPLAY_GUIWIDTH / 8) + byte] = out;
-                }
-            }
-        } display_Changed = false; yield();
-    }
 }

@@ -1,5 +1,7 @@
 #include "filesystem/ramfs.h"
 
+extern pid_t multitask_Focus;
+
 // Initialize state of RAM file system
 bool ramfs_Running = false;
 
@@ -22,17 +24,33 @@ int ramfs_init() {
     for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT; ++i) { ramfs_Entry[i] = NULL; }
     ramfs_Entry[RAMFS_ROOTDIR] = malloc(sizeof(ramfs_Entry_t));
     if (ramfs_Entry[RAMFS_ROOTDIR] == NULL)
-        { kernel_panic("Unable to initialize RAM file system: Out of memory"); }
+        { PANIC("Unable to initialize RAM file system: Out of memory"); }
     ramfs_Entry_t* rootdir = (ramfs_Entry_t*)ramfs_Entry[RAMFS_ROOTDIR];
     copy(rootdir->name, "/");
-    copy(rootdir->user, "deputy");
-    copy(rootdir->group, "deputy");
+    rootdir->user = 0;
+    rootdir->group = 0;
     rootdir->ctime = date();
     rootdir->mtime = date();
     rootdir->atime = date();
     rootdir->perm = 0777;
     rootdir->type = RAMFS_TYPE_DIR;
     ramfs_Running = true; return RAMFS_STATUS_SUCCESS;
+}
+
+/**
+ * @brief Function for get index of specific entry in entry table
+ * 
+ * @param path Path of specific entry
+ * 
+ * @return Index of specific entry
+ */
+int ramfs_index(char* path) {
+    if (!ramfs_Running) { return RAMFS_STATUS_NOTINIT; }
+    for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT; ++i) {
+        if (ramfs_Entry[i] == NULL) { continue; }
+        ramfs_Entry_t* ent = (ramfs_Entry_t*)ramfs_Entry[i];
+        if (ent->name && ent->name[0] != '\0' && compare(ent->name, path) == 0) { return i; }
+    } return RAMFS_STATUS_ENTRYNOTFOUND;
 }
 
 /**
@@ -43,12 +61,26 @@ int ramfs_init() {
  * @return Information table of entry
  */
 ramfs_Entry_t* ramfs_stat(char* path) {
-    if (!ramfs_Running) { return NULL; }
+    if (!ramfs_Running || path == NULL) { return NULL; }
     for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT; ++i) {
         if (ramfs_Entry[i] == NULL) { continue; }
         ramfs_Entry_t* ent = (ramfs_Entry_t*)ramfs_Entry[i];
         if (ent->name && ent->name[0] != '\0' && compare(ent->name, path) == 0) { return ent; }
     } return NULL;
+}
+
+/**
+ * @brief Function for get parent directory of specific entry
+ * 
+ * @param path Path of specific entry
+ * 
+ * @return Information table of parent entry
+ */
+ramfs_Entry_t* ramfs_parent(char* path) {
+    if (!ramfs_Running || compare(path, "/") == 0) { return NULL; }
+    int end = 0; for (int i = 0; i < length(path) - 1; ++i) { if (path[i] == '/') { end = i + 1; } }
+    fill(ramfs_PathBuffer, 0, RAMFS_MAX_PATH_LENGTH + 1); ncopy(ramfs_PathBuffer, path, end);
+    return ramfs_stat(ramfs_PathBuffer);
 }
 
 /**
@@ -61,6 +93,29 @@ ramfs_Entry_t* ramfs_stat(char* path) {
 ramfs_Entry_t* ramfs_dirent(int entry) {
     if (!ramfs_Running) { return NULL; }
     return (ramfs_Entry_t*)ramfs_Entry[entry];
+}
+
+/**
+ * @brief Function for check operation permission of specific entry
+ * 
+ * @param ent Specific entry
+ * @param perm Permission
+ * 
+ * @return Has access or not (true/false)
+ */
+bool ramfs_checkPerm(ramfs_Entry_t* ent, uint8_t perm) {
+    if (!ramfs_Running) { return RAMFS_STATUS_NOTINIT; }
+    if (ent == NULL) { return false; }
+    if (multitask_Focus == 0) { return true; }
+    uid_t uid = getuid(); gid_t gid = getgid();
+    if (uid == MULTITASK_USER_ROOT) { return true; }
+    if (uid == ent->user) {
+        if (((ent->perm >> 6) & 7) & perm) return true;
+    } else if (gid == ent->group) {
+        if (((ent->perm >> 3) & 7) & perm) return true;
+    } else {
+        if ((ent->perm & 7) & perm) return true;
+    } return false;
 }
 
 /**
@@ -109,29 +164,30 @@ int* ramfs_readDir(char* path) {
  */
 int ramfs_createDir(char* path) {
     if (!ramfs_Running) { return RAMFS_STATUS_NOTINIT; }
-    if (length(path) == 0 || path[length(path) - 1] != '/') { return RAMFS_STATUS_FAILURE; }
+    if (length(path) == 0 ||
+        path[length(path) - 1] != '/' ||
+        length(path) >= RAMFS_MAX_PATH_LENGTH) { return RAMFS_STATUS_FAILURE; }
     for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT; ++i) {
         if (ramfs_Entry[i] == NULL) { continue; }
         ramfs_Entry_t* ent = (ramfs_Entry_t*)ramfs_Entry[i];
         if (ent->name && ncompare(ent->name, path, length(path) - 1) == 0)
             { if (ent->type == RAMFS_TYPE_FILE) { return RAMFS_STATUS_FILEEXISTS; } }
     }
-    bool found = false;
     for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT; ++i) {
         if (ramfs_Entry[i] == NULL) { continue; }
         ramfs_Entry_t* ent = (ramfs_Entry_t*)ramfs_Entry[i];
         if (ent->name && ent->name[0] != '\0' && compare(ent->name, path) == 0)
-            { if (ent->type == RAMFS_TYPE_DIR) { found = true; } break; }
-    } if (found) { return RAMFS_STATUS_ALREADYEXISTS; }
+            { if (ent->type == RAMFS_TYPE_DIR) { return RAMFS_STATUS_ALREADYEXISTS; } break; }
+    }
     {
-        tokens_t dirs = split(path, '/');
+        tokens_t* dirs = split(path, '/');
         fill(ramfs_PathBuffer, 0, RAMFS_MAX_PATH_LENGTH + 1);
         ramfs_PathBuffer[0] = '/';
         int bufptr = 1;
-        for (int i = 0; i < dirs.c - 1; ++i) {
+        for (int i = 0; i < dirs->c - 1; ++i) {
             for (int j = 0; j <= i; ++j) {
-                copy(&ramfs_PathBuffer[bufptr], dirs.v[j]);
-                bufptr += length(dirs.v[j]);
+                copy(&ramfs_PathBuffer[bufptr], dirs->v[j]);
+                bufptr += length(dirs->v[j]);
                 ramfs_PathBuffer[bufptr] = '/';
                 bufptr++;
             }
@@ -149,17 +205,21 @@ int ramfs_createDir(char* path) {
             ramfs_PathBuffer[0] = '/';
         }
     }
-    int index = 0;
+    int index = -1;
     for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT; ++i) {
         if (ramfs_Entry[i] == NULL) { index = i; break; }
-    } if (index <= 0) { return RAMFS_STATUS_OUTOFMEMORY; }
+    } if (index == -1) { return RAMFS_STATUS_OUTOFMEMORY; }
     void* newptr = malloc(MEMORY_BLOCKSIZE);
     if (newptr == NULL) { return RAMFS_STATUS_OUTOFMEMORY; }
     ramfs_Entry[index] = newptr;
     ramfs_Entry_t* dir = (ramfs_Entry_t*)ramfs_Entry[index];
     copy(dir->name, path);
-    copy(dir->user, "root");
-    copy(dir->group, "root");
+    uid_t user = getuid();
+    if (user == -1) { dir->user = 0; }
+    else { dir->user = user; }
+    gid_t group = getgid();
+    if (group == -1) { dir->group = 0; }
+    else { dir->group = group; }
     dir->ctime = date();
     dir->mtime = date();
     dir->atime = date();
@@ -227,14 +287,14 @@ int ramfs_writeFile(char* path, size_t size, char* buffer) {
         }
     }
     {
-        tokens_t dirs = split(path, '/');
+        tokens_t* dirs = split(path, '/');
         fill(ramfs_PathBuffer, 0, RAMFS_MAX_PATH_LENGTH + 1);
         ramfs_PathBuffer[0] = '/';
         int bufptr = 1;
-        for (int i = 0; i < dirs.c - 1; ++i) {
+        for (int i = 0; i < dirs->c - 1; ++i) {
             for (int j = 0; j <= i; ++j) {
-                copy(&ramfs_PathBuffer[bufptr], dirs.v[j]);
-                bufptr += length(dirs.v[j]);
+                copy(&ramfs_PathBuffer[bufptr], dirs->v[j]);
+                bufptr += length(dirs->v[j]);
                 ramfs_PathBuffer[bufptr] = '/';
                 bufptr++;
             }
@@ -259,14 +319,19 @@ int ramfs_writeFile(char* path, size_t size, char* buffer) {
             ramfs_Entry[i] = newptr;
             ramfs_Entry_t* ent = (ramfs_Entry_t*)ramfs_Entry[i];
             copy(ent->name, path);
-            copy(ent->user, "root");
-            copy(ent->group, "root");
+            uid_t user = getuid();
+            if (user == -1) { ent->user = 0; }
+            else { ent->user = user; }
+            gid_t group = getgid();
+            if (group == -1) { ent->group = 0; }
+            else { ent->group = group; }
             ent->size = size;
             ent->ctime = date();
             ent->mtime = date();
             ent->atime = date();
             ent->perm = 0777;
             ent->type = RAMFS_TYPE_FILE;
+            ent->ftype = RAMFS_TYPE_FILE;
             ncopy((char*)ramfs_Entry[i] + MEMORY_BLOCKSIZE, buffer, size);
             return RAMFS_STATUS_SUCCESS;
         }
@@ -308,4 +373,24 @@ int ramfs_remove(char* path) {
             } free(ramfs_Entry[i]); ramfs_Entry[i] = NULL; return RAMFS_STATUS_SUCCESS;
         }
     } return RAMFS_STATUS_ENTRYNOTFOUND;
+}
+
+/**
+ * @brief Function for remove bulk files and directories
+ * 
+ * @param path Path of specific entry
+ * 
+ * @return Status code
+ */
+int ramfs_bulkRemove(char* path) {
+    if (!ramfs_Running) { return RAMFS_STATUS_NOTINIT; }
+    if (ramfs_stat(path) == NULL) { return RAMFS_STATUS_PATHNOTFOUND; }
+    if (ramfs_stat(path)->type != RAMFS_TYPE_DIR) { return ramfs_remove(path); }
+    for (int i = 0; i < RAMFS_MAX_ENTRY_COUNT; ++i) {
+        if (ramfs_Entry[i] == NULL) { continue; }
+        ramfs_Entry_t* ent = (ramfs_Entry_t*)ramfs_Entry[i];
+        if (ent->name && ent->name[0] != '\0' && ncompare(ent->name, path, length(path)) == 0) {
+            free(ramfs_Entry[i]); ramfs_Entry[i] = NULL;
+        }
+    } return RAMFS_STATUS_SUCCESS;
 }

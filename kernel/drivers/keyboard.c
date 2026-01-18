@@ -132,11 +132,12 @@ char keyboard_tochar(key_t key) {
  */
 key_t keyboard_waitkey() {
     uint16_t result = 0x0000;
+    int chardev = open("/dev/keyboard", O_RDONLY);
+    if (chardev == -1) { return result; }
     waitforkey:
-    while (!(port_inb(KEYBOARD_STATUSPORT) & 1));
-    uint8_t key = port_inb(KEYBOARD_DATAPORT);
+    uint8_t key; size_t n = 0; while (n != 1) { yield(); n = read(chardev, &key, 1); }
     if (key == KEYBOARD_KEY_SPECIAL) {
-        key = port_inb(KEYBOARD_DATAPORT);
+        size_t n = read(chardev, &key, 1); if (n != 1) { return result; }
         if (
             key >= KEYBOARD_KEY_SP_MM_PREVIOUS + KEYBOARD_KEY_RELEASE &&
             key <= KEYBOARD_KEY_SP_MM_MEDIASELECT + KEYBOARD_KEY_RELEASE
@@ -197,7 +198,7 @@ char keyboard_waitchar() {
  */
 void keyboard_process() {
     uint8_t* chardev = ramfs_readFile("/dev/keyboard");
-    if (chardev == NULL) { kernel_panic("Unable to read device '/dev/keyboard'"); }
+    if (chardev == NULL) { PANIC("Unable to read device /dev/keyboard"); }
     uint32_t* bufsize = (uint32_t*)chardev;
     while (true) {
         if (port_inb(KEYBOARD_STATUSPORT) & 1) {

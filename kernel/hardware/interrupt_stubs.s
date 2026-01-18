@@ -81,6 +81,7 @@ interrupts_exception0x07:   # 7
     addl $0x04, %esp
     ret
 interrupts_exception0x08:   # 8
+    iret
     pushl $0x08
     call interrupts_exceptionHandler
     addl $0x04, %esp

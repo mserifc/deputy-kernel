@@ -5,6 +5,8 @@
 #include "drivers/display.h"
 #include "drivers/keyboard.h"
 
+extern bool debugvar;
+
 // * Constants
 
 #define UTILS_RTC_INDEXPORT         0x70    // RTC (Real-Time Clock) index port
@@ -39,10 +41,16 @@ typedef struct {
 
 // * Public functions
 
+// Data manipulation algorithms
+
+uint32_t    xorshift32(uint32_t state);             // Convert a seed to a pseudo-random 32-bit integer
+void        xorcipher(char* input, char* key);      // Encrypt or decrypt data with a key
+uint32_t    fnv1ahash(uint8_t* data, size_t len);   // Hash the given data using FNV-1a hash algorithm
+
 // Timing functions
 
 date_t      date();                     // Get RTC date
-void        delay(uint32_t count);      // Introduce a delay (based on CPU speed)
+void        delay(uint32_t ms);         // Introduce a delay (based on CPU speed)
 void        sleep(uint32_t sec);        // Sleep the system for a certain amount of time (based on RTC)
 
 // Memory manipulation functions
@@ -59,7 +67,7 @@ int         ncompare(void* ptr1, void* ptr2, size_t len);   // Compare two buffe
 // String manipulation functions
 
 int         length(char* str);              // Get length of specific string
-tokens_t    split(char* str, char deli);    // Splits a string by a deliminer
+tokens_t*   split(char* str, char deli);    // Splits a string by a deliminer
 
 // String-integer conversion functions
 
@@ -69,10 +77,10 @@ char*       convert_xtoa(uint32_t num);     // Convert hexadecimal integer to AS
 
 // I/O functions
 
-int         getcursor();                                                // Get position of cursor position
-void        putcursor(int ptr);                                         // Set position of cursor position
-void        putchar(char chr);                                          // Print a single character to the CLI output
-void        puts(char* str);                                            // Print a string to the CLI output
-void        printf(char* format, ...);                                  // Print formatted output to the CLI output
-int         snprintf(char* buffer, size_t size, char* format, ...);     // Format and write output to a string
-char*       prompt(char* header);                                       // Read user input and return the entered string
+int         getcursor();                                            // Get position of cursor position
+void        putcursor(int ptr);                                     // Set position of cursor position
+void        putchar(char chr);                                      // Print a single character to the CLI output
+void        puts(char* str);                                        // Print a string to the CLI output
+void        printf(char* format, ...);                              // Print formatted output to the CLI output
+int         snprintf(char* buffer, size_t size, char* fmt, ...);    // Format and write output to a string
+char*       prompt(char* header);                                   // Read user input and return the entered string
