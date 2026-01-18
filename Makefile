@@ -50,6 +50,7 @@ OBJECTS = \
 	$(BUILD_DIR)/drivers/disk.o \
 	\
 	$(BUILD_DIR)/filesystem/ownfs.o \
+	$(BUILD_DIR)/filesystem/ramfs.o \
 	\
 	$(BUILD_DIR)/sysapi/syscall.o \
 	$(BUILD_DIR)/sysapi/stdio.o \

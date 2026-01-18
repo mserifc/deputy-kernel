@@ -86,6 +86,7 @@ struct memory_Block {
 void memory_init();             // Initializes the memory manager
 void* malloc(size_t size);      // Allocates memory
 void free(void* allocated);     // Frees memory
+struct memory_Block* memory_blkInfo(void* allocated);   // Sends information about allocated memory block
 char* memory_report();          // Writes a memory report
 
 // * Multitasking

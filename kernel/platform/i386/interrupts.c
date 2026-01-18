@@ -46,7 +46,7 @@ void interrupts_exceptionHandler(uint8_t num) {
         kernel_panic("Exception: Unknown, Code Unknown");
     } else {            // Else, print the exception message
         kernel_panic(
-            "Exception: %s, Code %d",
+            "CPU Exception: %s, Code %d",
             interrupts_exceptionMessage[num],   // Exception message
             num                                 // Exception code
         );

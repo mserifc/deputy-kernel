@@ -77,6 +77,16 @@ void free(void* allocated) {
     allocated = NULL;
 }
 
+// Function for get allocated memory block information
+struct memory_Block* memory_blkInfo(void* allocated) {
+    if (
+        allocated == NULL ||
+        (size_t)allocated < (size_t)memory_Space ||
+        (size_t)allocated >= (size_t)memory_Space + MEMORY_SIZE
+    ) { return NULL; }
+    return &memory_Blocklist[((size_t)allocated - (size_t)memory_Space) / MEMORY_BLOCKSIZE];
+}
+
 // Function for write a memory report
 char* memory_report() {
     size_t

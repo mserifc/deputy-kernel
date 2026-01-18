@@ -8,7 +8,7 @@
 #include "drivers/keyboard.h"
 #include "drivers/disk.h"
 
-#include "filesystem/ownfs.h"
+#include "filesystem/ramfs.h"
 
 #include "sysapi/syscall.h"
 
@@ -37,7 +37,7 @@ char* kernel_BootDeviceStr[] = {
 };
 
 // Working shell path
-char path[OWNFS_MAX_NAME_LENGTH + 1];
+char path[RAMFS_MAX_NAME_LENGTH + 1];
 
 // Check for file system is saved or not
 bool kernel_SaveFSSession = false;
@@ -67,7 +67,7 @@ void kernel_initHWDetector(multiboot_info_t* info) {
 
 // Function for list file system directory structure
 void test_listastree() {
-    struct ownfs_Root* root = ownfs_getRoot();
+    struct ramfs_Root* root = ramfs_getRoot();
     printf("Listing directory structure:\n");
     printf("    root:\n");
     for (int i = 0; i < root->dir_count; ++i) {
@@ -141,12 +141,12 @@ int kernel_commandHandler(char* path, char* str) {
                         strcmp(argv[1], "/") == 0
                     ) { strcpy(path, "/"); return 0; }
                     if (argv[1][0] == '/') {
-                        if (ownfs_findDirIndex(&argv[1][1]) != -1) {
-                            snprintf(path, OWNFS_MAX_NAME_LENGTH + 1, "/%s", &argv[1][1]);
+                        if (ramfs_getDirIndex(&argv[1][1]) != -1) {
+                            snprintf(path, RAMFS_MAX_NAME_LENGTH + 1, "/%s", &argv[1][1]);
                         } else { printf("Directory %s not found\n", argv[1]); return -1; }
                     } else {
-                        if (ownfs_findDirIndex(argv[1]) != -1) {
-                            snprintf(path, OWNFS_MAX_NAME_LENGTH + 1, "/%s", argv[1]);
+                        if (ramfs_getDirIndex(argv[1]) != -1) {
+                            snprintf(path, RAMFS_MAX_NAME_LENGTH + 1, "/%s", argv[1]);
                         } else { printf("Directory %s not found\n", argv[1]); return -1; }
                     }
                 } else { strcpy(path, "/"); }
@@ -155,7 +155,7 @@ int kernel_commandHandler(char* path, char* str) {
         } else if (argv[0] && strcmp(argv[0], "pwd") == 0) {
             printf("%s\n", path);
         } else if (argv[0] && strcmp(argv[0], "lstree") == 0) {
-            struct ownfs_Root* root = ownfs_getRoot();
+            struct ramfs_Root* root = ramfs_getRoot();
             printf("/\n");
             for (int i = 0; i < root->dir_count; ++i) {
                 printf("    %s/\n", root->dir[i].name);
@@ -166,11 +166,11 @@ int kernel_commandHandler(char* path, char* str) {
         } else if (argv[0] && strcmp(argv[0], "ls") == 0) {
             if (argc == 1) {
                 if (path && strcmp(path, "/") == 0) {
-                    for (int i = 0; i < ownfs_getRoot()->dir_count; ++i) {
-                        printf("%s\n", ownfs_getRoot()->dir[i].name);
+                    for (int i = 0; i < ramfs_getRoot()->dir_count; ++i) {
+                        printf("%s\n", ramfs_getRoot()->dir[i].name);
                     }
                 } else {
-                    struct ownfs_Directory* dir = ownfs_findDir(&path[1]);
+                    struct ramfs_Directory* dir = ramfs_getDir(&path[1]);
                     if (dir != NULL) {
                         for (int i = 0; i < dir->file_count; ++i) {
                             printf("%s\n", dir->file[i].name);
@@ -180,15 +180,15 @@ int kernel_commandHandler(char* path, char* str) {
                 }
             } else if (argc == 2) {
                 if (argv[1] && strcmp(argv[1], "/") == 0) {
-                    for (int i = 0; i < ownfs_getRoot()->dir_count; ++i) {
-                        printf("%s\n", ownfs_getRoot()->dir[i].name);
+                    for (int i = 0; i < ramfs_getRoot()->dir_count; ++i) {
+                        printf("%s\n", ramfs_getRoot()->dir[i].name);
                     }
                     return 0;
                 }
                 for (int i = 0; i < strlen(argv[1]); ++i) {
                     if (argv[1][i] == '/') { printf("File system does not support multi-level directories\n"); return -1; }
                 }
-                struct ownfs_Directory* dir = ownfs_findDir(argv[1]);
+                struct ramfs_Directory* dir = ramfs_getDir(argv[1]);
                 if (dir != NULL) {
                     for (int i = 0; i < dir->file_count; ++i) {
                         printf("%s\n", dir->file[i].name);
@@ -199,11 +199,11 @@ int kernel_commandHandler(char* path, char* str) {
         } else if (argv[0] && strcmp(argv[0], "cat") == 0) {
             if (argc > 1) {
                 if (path && strcmp(path, "/") == 0) { printf("Operation not supported by the file system\n"); return -1; }
-                struct ownfs_Directory* dir = ownfs_findDir(&path[1]);
+                struct ramfs_Directory* dir = ramfs_getDir(&path[1]);
                 if (dir == NULL) { printf("Working directory not found\n"); return -1; }
                 for (int i = 1; i < argc; ++i) {
-                    if (ownfs_readFile(&path[1], argv[i]) != NULL) {
-                        printf("%s", ownfs_readFile(&path[1], argv[i]));
+                    if (ramfs_readFile(&path[1], argv[i]) != NULL) {
+                        printf("%s", ramfs_readFile(&path[1], argv[i]));
                     } else { printf("File %s not found\n", argv[i]); return -1; }
                 }
                 putchar('\n'); return 0;
@@ -213,14 +213,14 @@ int kernel_commandHandler(char* path, char* str) {
                 for (int i = 0; i < strlen(argv[1]); ++i) {
                     if (argv[1][i] == '/') { printf("File system does not support multi-level directories\n"); return -1; }
                 }
-                if (ownfs_createDir(argv[1]) == -1) { printf("Unable to create directory %s\n", argv[1]); return -1; }
+                if (ramfs_createDir(argv[1]) == -1) { printf("Unable to create directory %s\n", argv[1]); return -1; }
             } else { printf("File system does not support multi-level directories\n"); return -1; }
         } else if (argv[0] && strcmp(argv[0], "rmdir") == 0) {
             if (path && strcmp(path, "/") == 0) {
                 for (int i = 0; i < strlen(argv[1]); ++i) {
                     if (argv[1][i] == '/') { printf("Unable to remove directory\n"); return -1; }
                 }
-                if (ownfs_removeDir(argv[1]) == -1) {printf("Unable to remove direcotry: Directory not found\n");return -1;}
+                if (ramfs_removeDir(argv[1]) == -1) {printf("Unable to remove direcotry: Directory not found\n");return -1;}
             } else { printf("Unable to remove directory: Directory not found\n"); return -1; }
         } else if (argv[0] && strcmp(argv[0], "touch") == 0) {
             if (argc > 1) {
@@ -229,7 +229,7 @@ int kernel_commandHandler(char* path, char* str) {
                         if (argv[1][i] == '/') { printf("Operation not supported\n"); return -1; }
                     }
                     for (int i = 1; i < argc; ++i) {
-                        if (ownfs_writeFile(&path[1], argv[i], "") == -1) { printf("Unable to create file %s\n", argv[i]); }
+                        if (ramfs_writeFile(&path[1], argv[i], "", 1) == -1) { printf("Unable to create file %s\n", argv[i]); }
                     }
                 } else { printf("Operation not supported by the file system\n"); return -1; }
             } else { printf("Too few arguments\n"); return -1; }
@@ -242,8 +242,8 @@ int kernel_commandHandler(char* path, char* str) {
                 for (int i = 0; i < strlen(argv[1]); ++i) {
                     if (argv[1][i] == '/') { printf("Operation not supported by the file system\n"); return -1; }
                 }
-                if (ownfs_findDir(&path[1]) == NULL) { printf("Working directory not found\n"); return -1; }
-                char* buffer = (char*)malloc(OWNFS_MAX_DATA_SIZE);
+                if (ramfs_getDir(&path[1]) == NULL) { printf("Working directory not found\n"); return -1; }
+                char* buffer = (char*)malloc(MEMORY_BLOCKSIZE);
                 int ptr = 0;
                 for (int i = 2; i < argc; ++i) {
                     int len = strlen(argv[i]);
@@ -255,7 +255,7 @@ int kernel_commandHandler(char* path, char* str) {
                     ptr++;
                 }
                 buffer[ptr] = '\0';
-                if (ownfs_writeFile(&path[1], argv[1], buffer) == -1) {
+                if (ramfs_writeFile(&path[1], argv[1], buffer, MEMORY_BLOCKSIZE) == -1) {
                     printf("Unable to write file %s\n", argv[1]);
                     return -1;
                 };
@@ -267,7 +267,7 @@ int kernel_commandHandler(char* path, char* str) {
                         if (argv[1][i] == '/') { printf("Operation not supported\n"); return -1; }
                     }
                     for (int i = 1; i < argc; ++i) {
-                        if (ownfs_removeFile(&path[1], argv[i]) == -1) { printf("Unable to remove file %s\n", argv[i]); }
+                        if (ramfs_removeFile(&path[1], argv[i]) == -1) { printf("Unable to remove file %s\n", argv[i]); }
                     }
                 } else { printf("Operation not supported by the file system\n"); return -1; }
             } else { printf("Too few arguments\n"); return -1; }
@@ -276,7 +276,9 @@ int kernel_commandHandler(char* path, char* str) {
             putcursor(0);
             return 0;
         } else if (argv[0] && strcmp(argv[0], "devtools") == 0) {
-            if (argv[1] && strcmp(argv[1], "panic") == 0) {
+            if (argv[1] && strcmp(argv[1], "mem") == 0) {
+                printf("Memory usage: %s\n", memory_report());
+            } else if (argv[1] && strcmp(argv[1], "panic") == 0) {
                 kernel_panic("Manually triggered");
             } else {
                 printf("Unknown developer tool.\n");
@@ -352,32 +354,32 @@ void kernel_main(void) {
     // * File system test
     if (false) {
         puts("---- File system test started ----\n");
-        printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
+        printf("Requested to create a directory (code: %d)\n", ramfs_createDir("docs"));
         test_listastree();
         // sleep(3);
-        printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
+        printf("Requested to create a directory (code: %d)\n", ramfs_createDir("docs"));
         test_listastree();
         // sleep(3);
-        printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "Hello, world!"));
+        printf("Requested to write a file (code: %d)\n", ramfs_writeFile("docs", "readme.txt", "Hello, world!", MEMORY_BLOCKSIZE));
         test_listastree();
-        printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
+        printf("Printing content of /docs/readme.txt: %s\n", ramfs_readFile("docs", "readme.txt"));
         // sleep(3);
-        printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "How are you?"));
+        printf("Requested to write a file (code: %d)\n", ramfs_writeFile("docs", "readme.txt", "How are you?", MEMORY_BLOCKSIZE));
         test_listastree();
-        printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
+        printf("Printing content of /docs/readme.txt: %s\n", ramfs_readFile("docs", "readme.txt"));
         // sleep(3);
-        printf("Requested to remove a file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
+        printf("Requested to remove a file (code: %d)\n", ramfs_removeFile("docs", "readme.txt"));
         test_listastree();
-        printf("Finding removed file (code %d)\n", ownfs_findFileIndex("docs", "readme.txt"));
+        printf("Finding removed file (code %d)\n", ramfs_getFileIndex("docs", "readme.txt"));
         // sleep(3);
-        printf("Requested to remove a removed file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
+        printf("Requested to remove a removed file (code: %d)\n", ramfs_removeFile("docs", "readme.txt"));
         test_listastree();
         // sleep(3);
-        printf("Requested to remove a directory (code: %d)\n", ownfs_removeDir("docs"));
+        printf("Requested to remove a directory (code: %d)\n", ramfs_removeDir("docs"));
         test_listastree();
-        printf("Finding removed directory (code %d)\n", ownfs_findDirIndex("docs"));
+        printf("Finding removed directory (code %d)\n", ramfs_getDirIndex("docs"));
         // sleep(3);
-        printf("Requested to remove a removed directory (code: %d)\n", ownfs_removeDir("docs"));
+        printf("Requested to remove a removed directory (code: %d)\n", ramfs_removeDir("docs"));
         test_listastree();
         // sleep(3);
         puts("---- File system test ended ----\n");
@@ -432,22 +434,22 @@ void kernel_main(void) {
     }
 
     // Loading file system session from disk
-    puts("Loading file system session from disk...");
-    if (ownfs_load() == -1) {
-        puts("\nAn error occured while loading the file system session from disk.\n");
-        kernel_SaveFSSession = false;
-    } else { kernel_SaveFSSession = true; puts(" Success.\n"); }
+    // puts("Loading file system session from disk...");
+    // if (ramfs_load() == -1) {
+    //     puts("\nAn error occured while loading the file system session from disk.\n");
+    //     kernel_SaveFSSession = false;
+    // } else { kernel_SaveFSSession = true; puts(" Success.\n"); }
 
     // * Built-in kernel shell
     if (true) {
         puts("Unable to run user shell, switching to built-in kernel shell.\n");
-        ownfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 26");
-        ownfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 26, booted successfully.");
-        ownfs_writeFile("system", "readme.txt", "Thanks for using my kernel ;)");
+        ramfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 27", MEMORY_BLOCKSIZE);
+        ramfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 27, booted successfully.", MEMORY_BLOCKSIZE);
+        ramfs_writeFile("system", "readme.txt", "Thanks for using my kernel ;)", MEMORY_BLOCKSIZE);
         strcpy(path, "/");
         char* header;
         while(1) {
-            snprintf(header, OWNFS_MAX_NAME_LENGTH + 3, "%s # ", path);
+            snprintf(header, RAMFS_MAX_NAME_LENGTH + 3, "%s # ", path);
             char* prompt = scanf(header);
             putchar('\n');
             if (prompt && strcmp(prompt, "exit") == 0) { printf("Process completed\n"); break; }
@@ -456,13 +458,14 @@ void kernel_main(void) {
     }
 
     // Saving file system session to disk
-    if (kernel_SaveFSSession) {
-        puts("Saving file system session to disk...");
-        if (ownfs_save() == -1) {
-            puts("An error occured while loading the file system session to disk.\n");
-        } else { puts(" Success.\n"); }
-    }
-    ownfs_disable();
+    // if (kernel_SaveFSSession) {
+    //     puts("Saving file system session to disk...");
+    //     if (ramfs_save() == -1) {
+    //         puts("An error occured while loading the file system session to disk.\n");
+    //     } else { puts(" Success.\n"); }
+    // }
+
+    ramfs_disable();
 
     kernel_panic("No processes to execute");    // Switch to idle if no process
 }
@@ -521,29 +524,32 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
     puts("Detecting Hardware..."); kernel_initHWDetector(boot_info); puts(" Success.\n");
     if (!disk_support()) { puts("Warning: Device does not support ATA disk controller, ignoring.\n"); }
     puts("Initializing Memory Manager..."); memory_init(); puts(" Success.\n");
-    puts("Initializing File System..."); ownfs_init(); puts(" Success.\n");
+    puts("Initializing RAM File System..."); ramfs_init(); puts(" Success.\n");
     puts("Initializing System Call Manager..."); syscall_init(); puts(" Success.\n");
     puts("Initializing Multitasking Manager..."); multitask_init(); puts(" Success.\n");
     puts("---- Initializing Ended ----\n");
     putchar('\n');
 
-    puts("Sheriff Kernel Build 26, booted successfully.\n");    // Print kernel boot success message and build version
-    printf("%s\n", memory_report());
-    void* task1 = malloc(32*1024);
-    printf("%d\n", (size_t)task1);
-    void* task2 = malloc(32*1024);
-    printf("%d\n", (size_t)task2);
-    void* task3 = malloc(32*1024);
-    printf("%d\n", (size_t)task3);
-    if (task1 == NULL || task2 == NULL || task3 == NULL) { kernel_panic("Memory allocation failed"); }
-    memcpy(task1, test_exmtask1, 32*1024);
-    memcpy(task2, test_exmtask2, 32*1024);
-    memcpy(task3, test_exmtask3, 32*1024);
-    printf("PID: %d\n", spawn(task1, 32*1024));
-    printf("PID: %d\n", spawn(task2, 32*1024));
-    printf("PID: %d\n", spawn(task3, 32*1024));
-    printf("%s\n", memory_report());
-    yield();
-    while(1);
+    puts("Sheriff Kernel Build 27, booted successfully.\n");    // Print kernel boot success message and build version
+    // * Multitasking system test
+    if (false) {
+        printf("%s\n", memory_report());
+        void* task1 = malloc(32*1024);
+        printf("%d\n", (size_t)task1);
+        void* task2 = malloc(32*1024);
+        printf("%d\n", (size_t)task2);
+        void* task3 = malloc(32*1024);
+        printf("%d\n", (size_t)task3);
+        if (task1 == NULL || task2 == NULL || task3 == NULL) { kernel_panic("Memory allocation failed"); }
+        memcpy(task1, test_exmtask1, 32*1024);
+        memcpy(task2, test_exmtask2, 32*1024);
+        memcpy(task3, test_exmtask3, 32*1024);
+        printf("PID: %d\n", spawn(task1, 32*1024));
+        printf("PID: %d\n", spawn(task2, 32*1024));
+        printf("PID: %d\n", spawn(task3, 32*1024));
+        printf("%s\n", memory_report());
+        yield();
+        while(1);
+    }
     kernel_main();                                              // Switch to kernel main
 }
