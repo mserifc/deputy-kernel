@@ -20,6 +20,9 @@ int IntDigitCount = 0;              // Integer digit count
 // Date result
 date_t Date;
 
+// Function for get current instruction address
+size_t getInstruction() { return (size_t)__builtin_return_address(0); }
+
 // Function for update the cursor
 int updateCursor() {
     display_putcursor(CursorLocation);
@@ -95,40 +98,6 @@ void delay(uint32_t count) {
         asm volatile ("nop");
     }
 }
-
-// Sleep the system for a certain amount of time (based on RTC)
-// void sleep_old(uint32_t sec) {
-//     SleepDate = date();
-//     for (int i = 0; i < sec; ++i) {
-//         if (SleepDate.sec+1 > 59) {
-//             SleepDate.sec = 0;
-//             if (SleepDate.min+1 > 59) {
-//                 SleepDate.min = 0;
-//                 if (SleepDate.hour+1 > 23) {
-//                     // Do nothing, ignore.
-//                 } else {
-//                     SleepDate.hour++;
-//                 }
-//             } else {
-//                 SleepDate.min++;
-//             }
-//         }
-//     }
-//     interrupts_IDTSetGate(INTERRUPTS_PIC_MASTER_OFFSET+INTERRUPTS_IRQ_TIMER, (size_t)timerHandler);
-//     SleepState = false;
-//     interrupts_PICIRQEnable(INTERRUPTS_IRQ_TIMER);
-//     while (true) {
-//         asm volatile ("hlt");
-//         if (SleepState == false) { asm volatile ("sti"); continue; }
-//         if (
-//             date().sec >= SleepDate.sec &&
-//             date().min >= SleepDate.min &&
-//             date().hour >= SleepDate.hour
-//         ) {
-//             SleepState = false; break;
-//         } else { SleepState = false; asm volatile ("sti"); continue; }
-//     }
-// }
 
 // Sleep the system for a certain amount of time (based on RTC)
 void sleep(uint32_t sec) {

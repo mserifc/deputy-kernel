@@ -20,17 +20,17 @@
         while (1) { asm volatile ("cli\n hlt"); }; \
     } while (0)
 
-// Macro for rebooting system
-// Prints a reboot message and reboots the system
-#define kernel_reboot() \
+// Macro for reseting system
+// Prints a system reset message and resets the system
+#define kernel_reset() \
     do { \
         /* Disable interrupts */ \
         asm volatile ("cli"); \
-        /* Print reboot message for user and wait a bit */ \
-        puts("Requested system reboot..."); sleep(1); \
+        /* Print system reset message for user and wait a bit */ \
+        puts("Requested system reset..."); sleep(1); \
         /* Send reset request to PS/2 keyboard command port */ \
         port_outb(0x64, 0xFE); \
-        /* Enter an infinite loop if reboot fail */ \
+        /* Enter an infinite loop if system reset fail */ \
         while (1) { asm volatile ("hlt"); } \
     } while (0)
 
@@ -90,21 +90,34 @@ char* memory_report();          // Writes a memory report
 
 // * Multitasking
 
+// Maximum process limit value
 #define MULTITASK_MAX_PROCESS_LIMIT 32
 
-#define MULTITASK_TIMER_CTRL 0x43
-#define MULTITASK_TIMER_COUNTER0 0x40
-#define MULTITASK_TIMER_PIT_FREQUENCY 1193182
-#define MULTITASK_TIMER_FREQUENCY 100
+// Multitask context structure
+// ! NOTE: This structure is no longer needed because the context switch system was failed.
+struct multitask_Context {
+    uint32_t EAX, EBX, ECX, EDX, ESI, EDI, EBP, ESP, EFLAGS;
+};
 
+// Multitask process structure
 struct multitask_Process {
     bool active;
+    struct multitask_Context context;
     size_t inst;
     size_t size;
     void* base;
 };
 
-int multitask_startProcess(void* program_buffer, size_t memory_size);
-int multitask_endProcess(uint32_t process_id);
+// Function prototypes
 
+// Function for spawn a process
+int spawn(void* program_addr, size_t memory_size);
+
+// Function for kill a process
+int kill(int pid);
+
+// Function for switch to next process
+void yield();
+
+// Function for initialize multitasking system
 int multitask_init();

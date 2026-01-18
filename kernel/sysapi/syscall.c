@@ -57,7 +57,6 @@ void syscall_init() {
     memset(syscall_Table, 0, sizeof(size_t) * SYSCALL_ENTRY_COUNT);
     interrupts_IDTSetGate(SYSCALL_INTERRUPT_VECTOR, (size_t)syscall_handler);
 
-    syscall_exit_init();
     syscall_stdio_init();
 }
 

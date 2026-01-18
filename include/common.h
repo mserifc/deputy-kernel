@@ -43,6 +43,9 @@ typedef struct {
     uint16_t year;  // Year
 } date_t;
 
+// Function for get current instruction address
+size_t getInstruction();
+
 // Function for update the cursor
 int updateCursor();
 
