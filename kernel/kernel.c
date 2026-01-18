@@ -12,6 +12,9 @@
 
 #include "sysapi/syscall.h"
 
+#include "bmp_24.h"
+#include "snail.h"
+
 // Kernel code start and end (Set in linker.ld)
 extern char kernel_start, kernel_end;
 
@@ -434,7 +437,7 @@ void kernel_main(void) {
     }
 
     // * Colorful graphic display test
-    if (true) {
+    if (false) {
         display_graphic_switch();
         uint8_t color = 0;
         while (true) {
@@ -444,6 +447,12 @@ void kernel_main(void) {
             } else { color++; }
             sleep(1);
         }
+    }
+
+    // * Bitmap image viewer test
+    if (true) {
+        display_graphic_switch();
+        display_graphic_bmpViewer(snail_bmp);
     }
 
     // Loading file system session from disk
@@ -456,8 +465,8 @@ void kernel_main(void) {
     // * Built-in kernel shell
     if (true) {
         puts("Unable to run user shell, switching to built-in kernel shell.\n");
-        ramfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 28", MEMORY_BLOCKSIZE);
-        ramfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 28, booted successfully.", MEMORY_BLOCKSIZE);
+        ramfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 29", MEMORY_BLOCKSIZE);
+        ramfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 29, booted successfully.", MEMORY_BLOCKSIZE);
         ramfs_writeFile("system", "readme.txt", "Thanks for using my kernel ;)", MEMORY_BLOCKSIZE);
         strcpy(path, "/");
         char* header;
@@ -543,7 +552,7 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
     puts("---- Initializing Ended ----\n");
     putchar('\n');
 
-    puts("Sheriff Kernel Build 28, booted successfully.\n");    // Print kernel boot success message and build version
+    puts("Sheriff Kernel Build 29, booted successfully.\n");    // Print kernel boot success message and build version
     // * Multitasking system test
     if (false) {
         printf("%s\n", memory_report());

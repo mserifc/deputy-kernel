@@ -99,3 +99,76 @@ void display_graphic_fillRect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, ui
         }
     }
 }
+
+#include "common.h"
+
+uint8_t display_graphic_24to8(uint8_t r, uint8_t g, uint8_t b) {
+    // if (r == 0x00 && g == 0x00 && b == 0x00) { return 0x00; }
+    // if (r == 0x00 && g == 0x00 && b == 0xFF) { return 0x01; }
+    // if (r == 0x00 && g == 0xFF && b == 0x00) { return 0x02; }
+    // if (r == 0xFF && g == 0x00 && b == 0x00) { return 0x04; }
+    // if (r == 0xFF && g == 0xFF && b == 0xFF) { return 0x3F; }
+    // return 0x20;
+    bool
+        rupper = false, rlower = false,
+        gupper = false, glower = false,
+        bupper = false, blower = false;
+    uint8_t result;
+    if (r > 170) {
+        rupper = true;
+        rlower = true;
+    } else if (r > 85) {
+        rupper = true;
+    } else if (r > 0) {
+        rlower = true;
+    }
+    if (g > 170) {
+        gupper = true;
+        glower = true;
+    } else if (g > 85) {
+        gupper = true;
+    } else if (g > 0) {
+        glower = true;
+    }
+    if (b > 170) {
+        bupper = true;
+        blower = true;
+    } else if (b > 85) {
+        bupper = true;
+    } else if (b > 0) {
+        blower = true;
+    }
+    result = (rlower << 5) | (glower << 4) | (blower << 3) | (rupper << 2) | (gupper << 1) | (bupper << 0);
+    return result;
+}
+
+void display_graphic_bmpViewer(void* image) {
+    struct info {
+        uint32_t size;
+        int32_t width;
+        int32_t height;
+        uint16_t planes;
+        uint16_t bitCount;
+        uint32_t compression;
+        uint32_t sizeImage;
+        int32_t XPelsPerMeter;
+        int32_t YPelsPerMeter;
+        uint32_t clrUsed;
+        uint32_t clrImportant;
+    };
+    struct pixel {
+        uint8_t b;
+        uint8_t g;
+        uint8_t r;
+    };
+    void* image_information = image + 14;
+    void* image_data = image + 54;
+    struct info* image_info = image_information;
+    struct pixel* image_px = image_data;
+    int n = 0;
+    for (int i = image_info->height; i > 0; --i) {
+        for (int j = 0; j < image_info->width; ++j) {
+            display_graphic_putPixel(j, i, display_graphic_24to8(image_px[n].r, image_px[n].g, image_px[n].b)); n++;
+        }
+    }
+}

@@ -40,7 +40,50 @@ void display_putcursor(int ptr);                        // Set the cursor to a s
 size_t display_getcursor();                             // Get the current position of the cursor
 void display_init();                                    // Initialize display driver
 
+typedef int int32_t;
+
+// 1. Dosya Başlığı (File Header)
+typedef struct {
+  uint16_t bfType;        // Dosya tipi (BM)
+  uint32_t bfSize;        // Dosyanın toplam boyutu
+  uint16_t bfReserved1;   // Ayrıcalıklı alan (genellikle 0)
+  uint16_t bfReserved2;   // Ayrıcalıklı alan (genellikle 0)
+  uint32_t bfOffBits;     // Resim verisinin dosyadaki başlangıç konumu
+} BMPFileHeader;
+
+// 2. Bitmap Bilgi Başlığı (Bitmap Information Header)
+typedef struct {
+  uint32_t biSize;            // Bitmap bilgi başlığının boyutu (genellikle 40 byte)
+  int32_t  biWidth;           // Resmin genişliği (piksel cinsinden)
+  int32_t  biHeight;          // Resmin yüksekliği (piksel cinsinden)
+  uint16_t biPlanes;          // Düzlemler (genellikle 1)
+  uint16_t biBitCount;        // Bit derinliği (genellikle 8, 24, 32)
+  uint32_t biCompression;     // Sıkıştırma türü (0: yok, 1: RLE8, vb.)
+  uint32_t biSizeImage;       // Resim verisinin boyutu
+  int32_t  biXPelsPerMeter;   // Yatay piksel yoğunluğu (genellikle 0)
+  int32_t  biYPelsPerMeter;   // Dikey piksel yoğunluğu (genellikle 0)
+  uint32_t biClrUsed;         // Kullanılan renk sayısı
+  uint32_t biClrImportant;    // Önemli renk sayısı
+} BMPInfoHeader;
+
+// 3. Renk Tablosu (Color Table) - 8-bit için
+typedef struct {
+  uint8_t blue;              // Mavi bileşeni
+  uint8_t green;             // Yeşil bileşeni
+  uint8_t red;               // Kırmızı bileşeni
+  // uint8_t reserved;          // Rezerv alan (genellikle 0)
+} BMPColor;
+
+// 4. BMP Yapısı - Tam yapı (file + info + pixel verisi)
+typedef struct {
+  BMPFileHeader fileHeader;      // Dosya başlığı
+  BMPInfoHeader infoHeader;      // Bitmap bilgi başlığı
+  BMPColor* colorTable;          // Renk tablosu (8-bit için)
+  // uint8_t* pixelData;            // Piksel verisi
+} BMPImage;
+
 void display_graphic_switch();
 uint8_t* display_graphic_getFrameBufferSegment();
 void display_graphic_putPixel(uint32_t x, uint32_t y, uint8_t c);
 void display_graphic_fillRect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t c);
+void display_graphic_bmpViewer(void* image);
