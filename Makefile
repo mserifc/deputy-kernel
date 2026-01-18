@@ -11,7 +11,7 @@ BUILD_DIR = build
 
 KERNEL = $(SRC_DIR)/kernel.c
 ENTRY = $(SRC_DIR)/entry.s
-OBJECTS = $(BUILD_DIR)/entry.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/common.o $(BUILD_DIR)/display.o $(BUILD_DIR)/keyboard.o
+OBJECTS = $(BUILD_DIR)/entry.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/port.o $(BUILD_DIR)/common.o $(BUILD_DIR)/display.o $(BUILD_DIR)/keyboard.o
 
 EMULATOR = qemu-system-i386
 EMULATOR_FLAGS = -monitor stdio

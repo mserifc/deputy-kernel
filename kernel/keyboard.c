@@ -68,5 +68,5 @@ char KeyboardScankey() {
             return (char)ShiftscanTable[input];
         }
     }
-    return 0;
+    return -1;
 }

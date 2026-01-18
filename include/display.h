@@ -25,6 +25,11 @@ enum DisplayColorTable {
 typedef enum DisplayColorTable Color;
 
 void DisplayClear();
-int DisplayPutchar(char chr, int x, int y);
-char DisplayGetchar(int x, int y);
-int DisplayPutcursor(int x, int y);
+void DisplaySettextcolor(Color color);
+void DisplaySetbackgroundcolor(Color color);
+Color DisplayGettextcolor();
+Color DisplayGetbackgroundcolor();
+int DisplayAxispoint(int x, int y);
+int DisplayPutchar(char chr, int point);
+char DisplayGetchar(int point);
+int DisplayPutcursor(int point);
