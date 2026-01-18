@@ -42,12 +42,14 @@ char* interrupts_exceptionMessage[] = {
 // The exception handler that gets called for each interrupt
 __attribute__((noreturn))
 void interrupts_exceptionHandler(uint8_t num) {
+    size_t address = (size_t)__builtin_return_address(0);   // Get the address that called exception
     if (num > 0x1F) {   // If the exception is unknown (greater than 0x1F)
-        kernel_panic("Exception: Unknown, Code Unknown");
+        kernel_panic("Exception: Unknown, Address: %d, Code Unknown", address);
     } else {            // Else, print the exception message
         kernel_panic(
-            "Exception: %s, Code %d",
+            "Exception: %s, Address: %d, Code %d",
             interrupts_exceptionMessage[num],   // Exception message
+            address,                            // Exception address
             num                                 // Exception code
         );
     }

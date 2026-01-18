@@ -3,6 +3,9 @@
 #include "multiboot.h"
 #include "types.h"
 #include "common.h"
+#include "platform/i386/port.h"
+#include "platform/i386/interrupts.h"
+#include "sysapi/syscall.h"
 
 // Kernel entry memory address
 #define KERNEL_ENTRY 0x100000
@@ -14,7 +17,21 @@
         /* Print the panic message with the file name and line number */ \
         printf("Kernel panic: %s:%d: " format, __FILE__, __LINE__, ##__VA_ARGS__); \
         /* Enter an infinite loop that disables interrupts and halts the CPU */ \
-        while(1) { asm volatile ("cli\n hlt"); }; \
+        while (1) { asm volatile ("cli\n hlt"); }; \
+    } while (0)
+
+// Macro for rebooting system
+// Prints a reboot message and reboots the system
+#define kernel_reboot() \
+    do { \
+        /* Disable interrupts */ \
+        asm volatile ("cli"); \
+        /* Print reboot message for user and wait a bit */ \
+        puts("Requested system reboot..."); sleep(1); \
+        /* Send reset request to PS/2 keyboard command port */ \
+        port_outb(0x64, 0xFE); \
+        /* Enter an infinite loop if reboot fail */ \
+        while (1) { asm volatile ("hlt"); } \
     } while (0)
 
 // Function prototype for get kernel size
@@ -70,3 +87,24 @@ void memory_init();             // Initializes the memory manager
 void* malloc(size_t size);      // Allocates memory
 void free(void* allocated);     // Frees memory
 char* memory_report();          // Writes a memory report
+
+// * Multitasking
+
+#define MULTITASK_MAX_PROCESS_LIMIT 32
+
+#define MULTITASK_TIMER_CTRL 0x43
+#define MULTITASK_TIMER_COUNTER0 0x40
+#define MULTITASK_TIMER_PIT_FREQUENCY 1193182
+#define MULTITASK_TIMER_FREQUENCY 100
+
+struct multitask_Process {
+    bool active;
+    size_t inst;
+    size_t size;
+    void* base;
+};
+
+int multitask_startProcess(void* program_buffer, size_t memory_size);
+int multitask_endProcess(uint32_t process_id);
+
+int multitask_init();

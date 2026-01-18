@@ -49,7 +49,12 @@ OBJECTS = \
 	$(BUILD_DIR)/drivers/keyboard.o \
 	$(BUILD_DIR)/drivers/disk.o \
 	\
-	$(BUILD_DIR)/filesystem/ownfs.o
+	$(BUILD_DIR)/filesystem/ownfs.o \
+	\
+	$(BUILD_DIR)/sysapi/syscall.o \
+	$(BUILD_DIR)/sysapi/stdio.o \
+	\
+	$(BUILD_DIR)/multitask.o
 # Tools
 TOOLS = $(TOOLS_DIR)/fsbridge
 

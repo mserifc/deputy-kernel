@@ -10,6 +10,8 @@
 
 #include "filesystem/ownfs.h"
 
+#include "sysapi/syscall.h"
+
 // Kernel code start and end (Set in linker.ld)
 extern char kernel_start, kernel_end;
 
@@ -37,6 +39,7 @@ char* kernel_BootDeviceStr[] = {
 // Working shell path
 char path[OWNFS_MAX_NAME_LENGTH + 1];
 
+// Check for file system is saved or not
 bool kernel_SaveFSSession = false;
 
 // Function for get kernel size
@@ -74,6 +77,40 @@ void test_listastree() {
         }
     }
 };
+
+// Example function for debug tests
+int test_exmfunc(uint32_t value) {
+    printf("Example function successfully called. Listing information:\n");
+    printf("    First argument value (as decimal): %d\n", value);
+    return 0;
+}
+
+void test_exmtask1() {
+    while (1) {
+        printf("Task running...\n");
+        sleep(1);
+    }
+    // asm volatile (
+    //     "mov $1, %%eax\t\n"
+    //     "int $0x80\t\n"
+    //     :
+    //     :
+    //     : "%eax"
+    // );
+}
+void test_exmtask2() {
+    while (1) {
+        printf("Another task running...\n");
+        sleep(1);
+    }
+    // asm volatile (
+    //     "mov $1, %%eax\t\n"
+    //     "int $0x80\t\n"
+    //     :
+    //     :
+    //     : "%eax"
+    // );
+}
 
 // Kernel command handler
 int kernel_commandHandler(char* path, char* str) {
@@ -257,95 +294,148 @@ void kernel_main(void) {
     puts("Welcome!\n");     // Print welcome message for user
     putchar('\n');
 
-    // * Memory manager test
-    if (false) {
-        puts("---- Memory test started ----\n");
-        printf("Memory usage: %s\n", memory_report());
-        char* my_data = (char*)malloc(9*1024);
-        if (my_data == NULL) { kernel_panic("Memory test error: Allocated memory is null"); }
-        printf("Allocated a memory block.\n");
-        // strcpy(my_data, "Hello, World!");
-        snprintf(my_data, MEMORY_BLOCKSIZE, "Hello, %s!", "World");
-        printf("Writed data to allocated memory block.\n");
-        printf("My data: %s\n", my_data);
-        printf("Memory usage: %s\n", memory_report());
-        free(my_data);
-        printf("Allocated memory freed.\n");
-        printf("Memory usage: %s\n", memory_report());
-        puts("---- Memory test ended ----\n");
-        putchar('\n');
-    }
+    // // * Memory manager test
+    // if (false) {
+    //     puts("---- Memory test started ----\n");
+    //     printf("Memory usage: %s\n", memory_report());
+    //     char* my_data = (char*)malloc(9*1024);
+    //     if (my_data == NULL) { kernel_panic("Memory test error: Allocated memory is null"); }
+    //     printf("Allocated a memory block.\n");
+    //     // strcpy(my_data, "Hello, World!");
+    //     snprintf(my_data, MEMORY_BLOCKSIZE, "Hello, %s!", "World");
+    //     printf("Writed data to allocated memory block.\n");
+    //     printf("My data: %s\n", my_data);
+    //     printf("Memory usage: %s\n", memory_report());
+    //     free(my_data);
+    //     printf("Allocated memory freed.\n");
+    //     printf("Memory usage: %s\n", memory_report());
+    //     puts("---- Memory test ended ----\n");
+    //     putchar('\n');
+    // }
 
-    // * Disk driver test
-    if (false) {
-        puts("---- Disk test started ----\n");
-        if (disk_support()) {
-            char* my_data = (char*)malloc(DISK_SECTOR_SIZE);
-            printf("Allocated a memory buffer.\n");
-            snprintf(my_data, DISK_SECTOR_SIZE, "Hello, %s!", "world");
-            printf("Writed data to allocated memory buffer.\n");
-            if (disk_writeSector(0, my_data) == -1) {
-                kernel_panic("Disk test error: Disk writing sector failed");
-            }
-            printf("Writed allocated memory buffer to disk's first sector.\n");
-            memset(my_data, 0, DISK_SECTOR_SIZE);
-            snprintf(my_data, DISK_SECTOR_SIZE, "Hi, %s!", "Serif");
-            printf("Writed data to allocated memory buffer.\n");
-            if (disk_writeSector(1, my_data) == -1) {
-                kernel_panic("Disk test error: Disk writing sector failed");
-            }
-            printf("Writed allocated memory buffer to disk's second sector.\n");
-            memset(my_data, 0, DISK_SECTOR_SIZE);
-            printf("Allocated memory buffer cleaned\n");
-            if (disk_readSector(0, my_data) == -1) {
-                kernel_panic("Disk test error: Disk reading sector failed");
-            }
-            printf("Readed data from disk's first sector: %s\n", my_data);
-            if (disk_readSector(1, my_data) == -1) {
-                kernel_panic("Disk test error: Disk reading sector failed");
-            }
-            printf("Readed data from disk's second sector: %s\n", my_data);
-            free(my_data);
-            printf("Allocated memory buffer freed.\n");
-        } else { puts("Disk test failed: Device does not support ATA disk controller.\n"); }
-        puts("---- Disk test ended ----\n");
-        putchar('\n');
-    }
+    // // * Disk driver test
+    // if (false) {
+    //     puts("---- Disk test started ----\n");
+    //     if (disk_support()) {
+    //         char* my_data = (char*)malloc(DISK_SECTOR_SIZE);
+    //         printf("Allocated a memory buffer.\n");
+    //         snprintf(my_data, DISK_SECTOR_SIZE, "Hello, %s!", "world");
+    //         printf("Writed data to allocated memory buffer.\n");
+    //         if (disk_writeSector(0, my_data) == -1) {
+    //             kernel_panic("Disk test error: Disk writing sector failed");
+    //         }
+    //         printf("Writed allocated memory buffer to disk's first sector.\n");
+    //         memset(my_data, 0, DISK_SECTOR_SIZE);
+    //         snprintf(my_data, DISK_SECTOR_SIZE, "Hi, %s!", "Serif");
+    //         printf("Writed data to allocated memory buffer.\n");
+    //         if (disk_writeSector(1, my_data) == -1) {
+    //             kernel_panic("Disk test error: Disk writing sector failed");
+    //         }
+    //         printf("Writed allocated memory buffer to disk's second sector.\n");
+    //         memset(my_data, 0, DISK_SECTOR_SIZE);
+    //         printf("Allocated memory buffer cleaned\n");
+    //         if (disk_readSector(0, my_data) == -1) {
+    //             kernel_panic("Disk test error: Disk reading sector failed");
+    //         }
+    //         printf("Readed data from disk's first sector: %s\n", my_data);
+    //         if (disk_readSector(1, my_data) == -1) {
+    //             kernel_panic("Disk test error: Disk reading sector failed");
+    //         }
+    //         printf("Readed data from disk's second sector: %s\n", my_data);
+    //         free(my_data);
+    //         printf("Allocated memory buffer freed.\n");
+    //     } else { puts("Disk test failed: Device does not support ATA disk controller.\n"); }
+    //     puts("---- Disk test ended ----\n");
+    //     putchar('\n');
+    // }
 
-    // * File system test
-    if (false) {
-        puts("---- File system test started ----\n");
-        printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
-        test_listastree();
-        // sleep(3);
-        printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
-        test_listastree();
-        // sleep(3);
-        printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "Hello, world!"));
-        test_listastree();
-        printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
-        // sleep(3);
-        printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "How are you?"));
-        test_listastree();
-        printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
-        // sleep(3);
-        printf("Requested to remove a file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
-        test_listastree();
-        printf("Finding removed file (code %d)\n", ownfs_findFileIndex("docs", "readme.txt"));
-        // sleep(3);
-        printf("Requested to remove a removed file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
-        test_listastree();
-        // sleep(3);
-        printf("Requested to remove a directory (code: %d)\n", ownfs_removeDir("docs"));
-        test_listastree();
-        printf("Finding removed directory (code %d)\n", ownfs_findDirIndex("docs"));
-        // sleep(3);
-        printf("Requested to remove a removed directory (code: %d)\n", ownfs_removeDir("docs"));
-        test_listastree();
-        // sleep(3);
-        puts("---- File system test ended ----\n");
-        putchar('\n');
-    }
+    // // * File system test
+    // if (false) {
+    //     puts("---- File system test started ----\n");
+    //     printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
+    //     test_listastree();
+    //     // sleep(3);
+    //     printf("Requested to create a directory (code: %d)\n", ownfs_createDir("docs"));
+    //     test_listastree();
+    //     // sleep(3);
+    //     printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "Hello, world!"));
+    //     test_listastree();
+    //     printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
+    //     // sleep(3);
+    //     printf("Requested to write a file (code: %d)\n", ownfs_writeFile("docs", "readme.txt", "How are you?"));
+    //     test_listastree();
+    //     printf("Printing content of /docs/readme.txt: %s\n", ownfs_readFile("docs", "readme.txt"));
+    //     // sleep(3);
+    //     printf("Requested to remove a file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
+    //     test_listastree();
+    //     printf("Finding removed file (code %d)\n", ownfs_findFileIndex("docs", "readme.txt"));
+    //     // sleep(3);
+    //     printf("Requested to remove a removed file (code: %d)\n", ownfs_removeFile("docs", "readme.txt"));
+    //     test_listastree();
+    //     // sleep(3);
+    //     printf("Requested to remove a directory (code: %d)\n", ownfs_removeDir("docs"));
+    //     test_listastree();
+    //     printf("Finding removed directory (code %d)\n", ownfs_findDirIndex("docs"));
+    //     // sleep(3);
+    //     printf("Requested to remove a removed directory (code: %d)\n", ownfs_removeDir("docs"));
+    //     test_listastree();
+    //     // sleep(3);
+    //     puts("---- File system test ended ----\n");
+    //     putchar('\n');
+    // }
+
+    // // * System call manager test
+    // if (false) {
+    //     puts("---- System call manager test started ----\n");
+    //     printf("Adding new system call to first entry (number 1)...");
+    //     syscall_addEntry(1, (size_t)test_exmfunc);
+    //     printf(" Success.\n");
+    //     printf("Calling added system call... (EAX: 1, EBX: 76)\n");
+    //     asm volatile (
+    //         "mov $1, %%eax\n\t"
+    //         "mov $76, %%ebx\n\t"
+    //         "int $0x80\n\t"
+    //         :
+    //         :
+    //         : "%eax"
+    //     );
+    //     int result;
+    //     asm volatile ("mov %%eax, %0" : "=r"(result) : : "%eax");
+    //     printf("    Return value (EAX): %d\n", result);
+    //     printf("Removing added system call (number 1)...");
+    //     syscall_addEntry(1, 0x00);
+    //     printf(" Success.\n");
+    //     puts("---- System call manager test ended ----\n");
+    //     putchar('\n');
+    // }
+
+    // if (0) {
+    //     char mymsg[100];
+    //     asm volatile (
+    //         "mov $3, %%eax\n\t"
+    //         "mov %0, %%ebx\n\t"
+    //         "mov $10, %%ecx\n\t"
+    //         "int $0x80\n\t"
+    //         :
+    //         : "r"(mymsg)
+    //         : "%eax", "%ebx", "%ecx"
+    //     );
+    //     asm volatile (
+    //         "mov $4, %%eax\n\t"
+    //         "mov %0, %%ebx\n\t"
+    //         "mov %1, %%ecx\n\t"
+    //         "int $0x80\n\t"
+    //         :
+    //         : "r"(mymsg), "r"(strlen(mymsg))
+    //         : "%eax", "%ebx", "%ecx"
+    //     );
+    // }
+
+    // multitask_startProcess(test_exmtask, 32*1024);
+    // multitask_startProcess(test_exmtask2, 32*1024);
+    // void* myprogram = malloc(OWNFS_MAX_DATA_SIZE);
+    // memcpy(myprogram, ownfs_findFile("myfiles", "program.bin")->data, OWNFS_MAX_DATA_SIZE);
+    // asm volatile ("jmp *%0" : : "r"(myprogram));
 
     // Loading file system session from disk
     puts("Loading file system session from disk...");
@@ -357,8 +447,8 @@ void kernel_main(void) {
     // * Built-in kernel shell
     if (true) {
         puts("Unable to run user shell, switching to built-in kernel shell.\n");
-        ownfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 24");
-        ownfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 24, booted successfully.");
+        ownfs_writeFile("system", "kernelversion.txt", "Sheriff Kernel Build 25");
+        ownfs_writeFile("system", "bootlog.txt", "Sheriff Kernel Build 25, booted successfully.");
         ownfs_writeFile("system", "readme.txt", "Thanks for using my kernel ;)");
         strcpy(path, "/");
         char* header;
@@ -367,6 +457,7 @@ void kernel_main(void) {
             char* prompt = scanf(header);
             putchar('\n');
             if (prompt && strcmp(prompt, "exit") == 0) { printf("Process completed\n"); break; }
+            // printf("%s\n", prompt);
             if (kernel_commandHandler(path, prompt) == -1) { /* Handle error */ }
         }
     }
@@ -438,20 +529,22 @@ void kernel_init(multiboot_info_t* boot_info, uint32_t boot_magic) {
     if (!disk_support()) { puts("Warning: Device does not support ATA disk controller, ignoring.\n"); }
     puts("Initializing Memory Manager..."); memory_init(); puts(" Success.\n");
     puts("Initializing File System..."); ownfs_init(); puts(" Success.\n");
+    puts("Initializing System Call Manager..."); syscall_init(); puts(" Success.\n");
+    puts("Initializing Multitasking Manager..."); multitask_init(); puts(" Success.\n");
     puts("---- Initializing Ended ----\n");
     putchar('\n');
 
-    // * I fixed PIC
-    // interrupts_PICIRQEnable(INTERRUPTS_IRQ_TIMER);
-    while (0) {
-        // puts("waiting for interrupt\n");
-        asm volatile ("hlt");
-        port_inb(KEYBOARD_PORT);
-        asm volatile ("sti");
-        // interrupts_PICSendEOI(INTERRUPTS_IRQ_TIMER);
-        // puts("continue\n");
-    }
-
-    puts("Sheriff Kernel Build 24, booted successfully.\n");    // Print kernel boot success message and build version
-    kernel_main();                                              // Switch to kernel main
+    puts("Sheriff Kernel Build 25 (normally, planned as a final but failed), booted successfully.\n");  // Print kernel boot success message and build version
+    printf("%s\n", memory_report());
+    void* task1 = malloc(16*1024);
+    memcpy(task1, test_exmtask1, 16*1024);
+    void* task2 = malloc(16*1024);
+    memcpy(task2, test_exmtask2, 16*1024);
+    void* task3 = malloc(16*1024);
+    memcpy(task3, kernel_main, 16*1024);
+    printf("%s\n", memory_report());
+    multitask_startProcess(task3, 16*1024);
+    asm volatile ("sti");
+    while(1);
+    kernel_main();                                                      // Switch to kernel main
 }

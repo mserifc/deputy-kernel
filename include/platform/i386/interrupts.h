@@ -119,26 +119,32 @@ void interrupts_exception0x1F(void);
 void interrupts_exceptionInterruptsInit(void);
 
 // Function prototypes
+
 __attribute__((noreturn))
 void interrupts_exceptionHandler(uint8_t num);                  // Exception handler for interrupts
 void interrupts_defaultHandler(void);                           // Default interrupt handler
 
 // PIC related functions
+
 void interrupts_PICSendEOI(uint8_t irq);                        // Send End-of-Interrupt (EOI) signal to the PIC
 uint16_t interrupts_PICGetIRR(void);                            // Get the Interrupt Request Register (IRR) from the PIC
 uint16_t interrupts_PICGetISR(void);                            // Get the In-Service Register (ISR) from the PIC
 
 // IRQ enable/disable functions
+
 void interrupts_PICIRQEnable(uint8_t irq);                      // Enable a specific IRQ on the PIC
 void interrupts_PICIRQDisable(uint8_t irq);                     // Disable a specific IRQ on the PIC
 
 // PIC control functions
+
 void interrupts_PICDisable(void);                               // Disable the PIC
 void interrupts_PICRemap(uint8_t offset1, uint8_t offset2);     // Remap the PIC to new IRQ offsets
 
 // IDT control functions
+
 void interrupts_IDTSetGate(int num, uint32_t handler);          // Set a gate in the IDT for a specific interrupt
 void interrupts_IDTLoad();                                      // Load the IDT into the CPU
 
 // Initialization function
+
 void interrupts_init();                                         // Initialize interrupt system (IDT, PIC, etc.)

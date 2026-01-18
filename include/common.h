@@ -5,22 +5,29 @@
 #include "platform/i386/interrupts.h"
 #include "drivers/display.h"
 #include "drivers/keyboard.h"
+#include "sysapi/syscall.h"
+
+// Macro function for convert specific number macro to string
+#define STRING(x) #x
 
 // Define the maximum length of the user input prompt
 #define PROMPT_LENGTH 256
 
 // Maximum tokens and digits constants for string manipulation
-#define MAX_STR_TOKENS 127
-#define MAX_INT_DIGITS 10
+
+#define MAX_STR_TOKENS 127      // Maximum string token count
+#define MAX_INT_DIGITS 10       // Maximum integer digit count
 
 // Define tabulation length
 #define TAB_LENGTH 4
 
 // Define RTC port values
-#define RTC_INDEX_PORT 0x70
-#define RTC_DATA_PORT 0x71
+
+#define RTC_INDEX_PORT 0x70     // RTC index port
+#define RTC_DATA_PORT 0x71      // RTC data port
 
 // Define macros for variable argument list handling
+
 #define va_list __builtin_va_list                           // Type definition for variable argument list
 #define va_start(ap, last) __builtin_va_start(ap, last)     // Initialize variable argument list
 #define va_arg(ap, type) __builtin_va_arg(ap, type)         // Retrieve the next argument of a specified type
@@ -43,6 +50,7 @@ int updateCursor();
 void putcursor(int ptr);
 
 // Functions for get string and digit counter values
+
 int getStrTokenCount();     // Get string tokens
 int getIntDigitCount();     // Get integer digits
 
@@ -60,7 +68,9 @@ void readRTC (
 );
 
 // Functions for timing, scheduling and clock
+
 // void schedulefn(int sec, void* fn); // Schedule a function for run after a certain amount of time
+
 date_t date();                      // Get RTC date
 void delay(uint32_t count);         // Introduce a delay (based on CPU speed)
 void sleep(uint32_t sec);           // Sleep the system for a certain amount of time (based on RTC)
@@ -72,14 +82,17 @@ int scrolldown(int times);
 bool isdigit(char chr);
 
 // Functions for split strings and integers
+
 char** split(char* str, char deli); // String splitter
 int* splitdigits(int num);          // Integer splitter
 
 // Functions for memory manipulation
+
 void* memset(void* ptr, char value, size_t size);       // Fill a block of memory with specific value
 void* memcpy(void* dest, const void* src, size_t size); // Copy a block of memory from source to destination
 
 // Functions for string manipulation
+
 int strlen(char* str);                                          // Get the length of specific string
 char* strcpy(char* dest, const char* src);                      // Copy a string to another one
 char* strncpy(char* dest, const char* src, size_t num);         // Copy a string to another one (with limit)
@@ -88,11 +101,13 @@ int strncmp(const char* str1, const char* str2, size_t num);    // Compare two s
 int snprintf(char* buffer, size_t size, char* format, ...);     // Format and write output to a string
 
 // Functions for string-integer manipulations
+
 int atoi(char* str);        // Convert ASCII character to integer
 char* itoa(int num);        // Convert integer to ASCII character
 char* xtoa(uint32_t num);   // Convert hexdecimal integer to ASCII character
 
 // Functions for CLI (Command Line Interface) I/O
+
 void putchar(char chr);         // Print a single character to the CLI output
 void puts(char* str);           // Print a string to the CLI output
 void printf(char* format, ...); // Print formatted output to the CLI output
