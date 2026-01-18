@@ -2,7 +2,14 @@ CC = gcc
 AS = nasm
 LD = /usr/local/opt/llvm/bin/ld.lld
 
-CC_FLAGS = -m32 --target=i386-unknown-linux-gnu -fno-use-cxa-atexit -nostdlib -fno-builtin -fno-rtti -fno-exceptions -I include
+CC_FLAGS = -m32 \
+	--target=i386-unknown-linux-gnu \
+	-fno-use-cxa-atexit \
+	-nostdlib \
+	-fno-builtin \
+	-fno-rtti \
+	-fno-exceptions \
+	-I include
 AS_FLAGS = -f elf32
 LD_FLAGS = -melf_i386
 
@@ -11,7 +18,13 @@ BUILD_DIR = build
 
 KERNEL = $(SRC_DIR)/kernel.c
 ENTRY = $(SRC_DIR)/entry.s
-OBJECTS = $(BUILD_DIR)/entry.o $(BUILD_DIR)/kernel.o $(BUILD_DIR)/port.o $(BUILD_DIR)/common.o $(BUILD_DIR)/display.o $(BUILD_DIR)/keyboard.o
+OBJECTS = \
+	$(BUILD_DIR)/entry.o \
+	$(BUILD_DIR)/kernel.o \
+	$(BUILD_DIR)/port.o \
+	$(BUILD_DIR)/display.o \
+	$(BUILD_DIR)/keyboard.o \
+	$(BUILD_DIR)/common.o
 
 EMULATOR = qemu-system-i386
 EMULATOR_FLAGS = -monitor stdio

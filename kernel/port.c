@@ -1,13 +1,5 @@
 #include "port.h"
 
-void port_outb(uint16_t port, uint8_t value) {
-    asm volatile (
-        "outb %0, %1"
-        :
-        : "a"(value), "Nd"(port)
-    );
-}
-
 uint8_t port_inb(uint16_t port) {
     uint8_t value;
     asm volatile (
@@ -16,4 +8,12 @@ uint8_t port_inb(uint16_t port) {
         : "Nd"(port)
     );
     return value;
+}
+
+void port_outb(uint16_t port, uint8_t value) {
+    asm volatile (
+        "outb %0, %1"
+        :
+        : "a"(value), "Nd"(port)
+    );
 }

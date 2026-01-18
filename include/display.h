@@ -1,3 +1,6 @@
+#ifndef DISPLAY_H
+#define DISPLAY_H
+
 #include "types.h"
 
 #define DisplayWidth 80
@@ -24,12 +27,28 @@ enum DisplayColorTable {
 
 typedef enum DisplayColorTable Color;
 
-void DisplayClear();
-void DisplaySettextcolor(Color color);
-void DisplaySetbackgroundcolor(Color color);
-Color DisplayGettextcolor();
-Color DisplayGetbackgroundcolor();
-int DisplayAxispoint(int x, int y);
-int DisplayPutchar(char chr, int point);
-char DisplayGetchar(int point);
-int DisplayPutcursor(int point);
+typedef struct {
+    void (*clear)();
+    void (*reload)();
+    int (*putchar)(char chr, int point);
+    char (*getchar)(int point);
+    int (*loadcursor)(int point);
+    void (*setTextColor)(Color color);
+    void (*setBackgroundColor)(Color color);
+    Color (*getTextColor)();
+    Color (*getBackgroundColor)();
+} Display;
+
+void display_clear();
+void display_reload();
+
+int display_putchar(char chr, int point);
+char display_getchar(int point);
+int display_loadcursor(int point);
+
+void display_setTextColor(Color color);
+void display_setBackgroundColor(Color color);
+Color display_getTextColor();
+Color display_getBackgroundColor();
+
+#endif // DISPLAY_H

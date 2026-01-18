@@ -1,8 +1,8 @@
 #include "keyboard.h"
 
-bool ShiftState = false;
+bool KeyboardShiftstate = false;
 
-const uint8_t KeyscanTable[216] = {
+const uint8_t KeyboardKeyscanTable[216] = {
      0 ,  0 , '1', '2', '3', '4', '5', '6', // 0x00 - 0x07
     '7', '8', '9', '0', '-', '=',  0 ,  0 , // 0x08 - 0x0F
     'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', // 0x10 - 0x17
@@ -16,7 +16,7 @@ const uint8_t KeyscanTable[216] = {
     '2', '3', '0', '.',  0 ,  0 ,  0 ,  0 , // 0x50 - 0x57
 };
 
-const uint8_t ShiftscanTable[(sizeof(KeyscanTable) / sizeof(KeyscanTable[0]))] = {
+const uint8_t KeyboardShiftscanTable[(sizeof(KeyboardKeyscanTable) / sizeof(KeyboardKeyscanTable[0]))] = {
      0 ,  0 , '!', '@', '#', '$', '%', '^', // 0x00 - 0x07
     '&', '*', '(', ')', '_', '+',  0 ,  0 , // 0x08 - 0x0F
     'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', // 0x10 - 0x17
@@ -30,11 +30,7 @@ const uint8_t ShiftscanTable[(sizeof(KeyscanTable) / sizeof(KeyscanTable[0]))] =
     '2', '3', '0', '.',  0 ,  0 ,  0 ,  0 , // 0x50 - 0x57
 };
 
-bool KeyboardGetshiftstate() {
-    return ShiftState;
-}
-
-uint8_t KeyboardScankeycode() {
+uint8_t keyboard_scankeycode() {
     uint8_t current_input, new_input;
     current_input = port_inb(0x60);
     while(1) {
@@ -45,14 +41,14 @@ uint8_t KeyboardScankeycode() {
     }
 }
 
-char KeyboardScankey() {
-    uint8_t input = KeyboardScankeycode();
+char keyboard_scankey() {
+    uint8_t input = keyboard_scankeycode();
     if (input == 0x2A || input == 0x36) {
-        ShiftState = true;
+        KeyboardShiftstate = true;
         return '\0';
     }
     if (input == 0xAA || input == 0xB6) {
-        ShiftState = false;
+        KeyboardShiftstate = false;
         return '\0';
     }
     if (
@@ -61,11 +57,11 @@ char KeyboardScankey() {
     ) {
         return (char)input;
     }
-    if (input < (sizeof(KeyscanTable) / sizeof(KeyscanTable[0]))) {
-        if (!ShiftState) {
-            return (char)KeyscanTable[input];
-        } else if (ShiftState) {
-            return (char)ShiftscanTable[input];
+    if (input < (sizeof(KeyboardKeyscanTable) / sizeof(KeyboardKeyscanTable[0]))) {
+        if (!KeyboardShiftstate) {
+            return (char)KeyboardKeyscanTable[input];
+        } else if (KeyboardShiftstate) {
+            return (char)KeyboardShiftscanTable[input];
         }
     }
     return -1;
