@@ -1,1 +1,0 @@
-Sheriff Kernel Build 24, booted successfully.
