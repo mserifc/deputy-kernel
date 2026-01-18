@@ -1,4 +1,4 @@
-# Deputy the Operating System Kernel
+# Deputy: The Operating System Kernel
 
 A small, experimental operating system kernel developed as a personal learning project.
 
@@ -103,4 +103,3 @@ Key reference resources:
 ## Disclaimer
 
 This project is not intended for production use. The code is provided as-is, primarily for learning, experimentation, and reference.
-- 
