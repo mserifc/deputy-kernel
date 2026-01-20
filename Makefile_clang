@@ -14,7 +14,9 @@ CC_FLAGS = \
 	-ffreestanding \
 	-fno-builtin \
 	-fno-exceptions \
+	-fno-leading-underscore \
 	-I include
+# -O2 -g
 
 # Assembler flags
 AS_FLAGS = -target i386-elf -m32
@@ -28,10 +30,16 @@ LD_FLAGS = \
 
 # Build directory
 BUILD_DIR = build
+# Source directory
 SOURCE_DIR = source
-KERNEL = $(BUILD_DIR)/kernel.elf
-LINKER = linker.ld
 
+# The resulting executable kernel
+KERNEL = $(BUILD_DIR)/kernel.elf
+# Operating system module
+MODULE = $(BUILD_DIR)/system.tar
+# Linker script
+LINKER = linker.ld
+# Objects
 OBJECTS = \
 	$(BUILD_DIR)/kernel/entry.o \
 	$(BUILD_DIR)/kernel/kernel.o \
@@ -42,6 +50,9 @@ OBJECTS = \
 	$(BUILD_DIR)/kernel/multitask_swi.o \
 	$(BUILD_DIR)/kernel/multitask.o \
 	$(BUILD_DIR)/kernel/drivers.o \
+	$(BUILD_DIR)/kernel/mountmgr.o \
+	$(BUILD_DIR)/kernel/syscall.o \
+	$(BUILD_DIR)/kernel/iocall.o \
 	\
 	$(BUILD_DIR)/hw/port.o \
 	$(BUILD_DIR)/hw/protect_flush.o \
@@ -50,14 +61,23 @@ OBJECTS = \
 	$(BUILD_DIR)/hw/interrupts.o \
 	$(BUILD_DIR)/hw/acpi.o \
 	$(BUILD_DIR)/hw/devbus.o \
+	$(BUILD_DIR)/hw/i8042.o \
 	\
-	$(BUILD_DIR)/drv/usb.o
+	$(BUILD_DIR)/fs/tarfs.o \
+	\
+	$(BUILD_DIR)/drv/usb.o \
+	$(BUILD_DIR)/drv/keyboard.o \
+	$(BUILD_DIR)/drv/mouse.o
 
+# Emulator
 EMULATOR = qemu-system-i386
+# Emulator flags
 EMULATOR_FLAGS = -machine q35 -device qemu-xhci -device usb-mouse,id=mouse -rtc base=localtime -monitor stdio
 
-all: $(KERNEL)
+# Build the kernel
+all: $(KERNEL) $(MODULE)
 
+# Create build directory
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
@@ -75,10 +95,17 @@ $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.s | $(BUILD_DIR)
 $(KERNEL): $(LINKER) $(OBJECTS)
 	$(LD) $(LD_FLAGS) -o $@ $(OBJECTS)
 
-run: $(KERNEL)
-	$(EMULATOR) $(EMULATOR_FLAGS) -kernel $(KERNEL)
+# Build operating system module
+$(MODULE): system
+	tar --format=ustar -cf $@ $<
 
+# Run the kernel with OS module via emulator
+run: $(KERNEL) $(MODULE)
+	$(EMULATOR) $(EMULATOR_FLAGS) -kernel $(KERNEL) -initrd $(MODULE)
+
+# Clean up
 clean:
-	rm -f $(OBJECTS) $(KERNEL)
+	rm -f $(OBJECTS) $(KERNEL) $(MODULE)
 
+# Mark 'all', 'run', and 'clean' as non-file targets
 .PHONY: all run clean
