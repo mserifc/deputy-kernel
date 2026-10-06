@@ -81,7 +81,6 @@ interrupts_exception0x07:   # 7
     addl $0x04, %esp
     ret
 interrupts_exception0x08:   # 8
-    iret
     pushl $0x08
     call interrupts_exceptionHandler
     addl $0x04, %esp
@@ -206,163 +205,227 @@ interrupts_exception0x1F:   # 31
 // Function for initialize the interrupt handlers for exceptions
 interrupts_exceptionInterruptsInit:
     lea interrupts_exception0x00, %eax  # 0
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x00
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x01, %eax  # 1
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x01
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x02, %eax  # 2
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x02
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x03, %eax  # 3
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x03
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x04, %eax  # 4
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x04
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x05, %eax  # 5
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x05
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x06, %eax  # 6
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x06
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x07, %eax  # 7
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x07
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x08, %eax  # 8
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x08
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x09, %eax  # 9
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x09
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x0A, %eax  # 10
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x0A
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x0B, %eax  # 11
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x0B
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x0C, %eax  # 12
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x0C
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x0D, %eax  # 13
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x0D
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x0E, %eax  # 14
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x0E
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x0F, %eax  # 15
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x0F
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x10, %eax  # 16
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x10
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x11, %eax  # 17
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x11
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x12, %eax  # 18
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x12
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x13, %eax  # 19
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x13
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x14, %eax  # 20
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x14
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x15, %eax  # 21
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x15
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x16, %eax  # 22
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x16
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x17, %eax  # 23
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x17
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x18, %eax  # 24
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x18
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x19, %eax  # 25
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x19
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x1A, %eax  # 26
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x1A
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x1B, %eax  # 27
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x1B
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x1C, %eax  # 28
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x1C
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x1D, %eax  # 29
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x1D
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x1E, %eax  # 30
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x1E
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     lea interrupts_exception0x1F, %eax  # 31
+    pushl $0x8E
+    pushl $0x08
     pushl %eax
     pushl $0x1F
     call interrupts_setGate
-    addl $0x08, %esp
+    addl $16, %esp
     ret

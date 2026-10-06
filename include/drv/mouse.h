@@ -6,4 +6,8 @@
 #define MOUSE_RIGHTBTN (1 << 1)
 #define MOUSE_MIDDLEBTN (1 << 2)
 
+extern int mouse_PositionX;
+extern int mouse_PositionY;
+extern bool mouse_IsUpdated;
+
 void mouse_send(uint8_t stat, char xmov, char ymov);

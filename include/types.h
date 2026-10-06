@@ -42,6 +42,7 @@ typedef unsigned char bool;     // Boolean type for represent true/false values
 #define PACKED __attribute__((packed))              // No padding between structure members
 #define NORETURN __attribute__((noreturn))          // Function does not return
 #define INTERRUPT __attribute__((interrupt))        // Marks a function as an interrupt handler
+#define GENERALREGSONLY __attribute__((target("general-regs-only"))) // Function uses general registers only (recommended using with INTERRUPT attribute)
 #define UNUSED __attribute__((unused))              // Marks a function or variable as unused
 #define USED __attribute__((used))                  // Marks a function or variable as used
 #define ALIGNED(x) (__attribute__((aligned(x))))    // Align a structure to x bytes

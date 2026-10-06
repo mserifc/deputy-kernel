@@ -7,18 +7,25 @@ extern char kernel_Base, kernel_Limit;
 
 // Constants
 
-#define KERNEL_BUILD                32          // Kernel build version
+#define KERNEL_BUILD                33          // Kernel build version
 #define KERNEL_NAME                 "Deputy"
 #define KERNEL_RELEASE              "build_" NUMBER(KERNEL_BUILD)
 #define KERNEL_VERSION              "Deputy Kernel Build " NUMBER(KERNEL_BUILD) " (Jul 2025)"
 #define KERNEL_PLATFORM             "deputy/i386"
 
+#define KERNEL_SPACESIZE (16 * 1024 * 1024)   // Protected kernel space memory size
+
+// Macro functions
+
+// Macro function for printing formatted information log into console
 #define INFO(format, ...) \
     do { printf("%s: " format "\n", __func__, ##__VA_ARGS__); } while (0)
 
+// Macro function for printing formatted warning log into console
 #define WARN(format, ...) \
     do { printf("%s: Warning: " format "\n", __func__, ##__VA_ARGS__); } while (0)
 
+// Macro function for printing formatted error log into console
 #define ERR(format, ...) \
     do { printf("%s: Error: " format "\n", __func__, ##__VA_ARGS__); } while (0)
 
@@ -54,6 +61,8 @@ extern size_t           kernel_PhysicalSize;    // Physical size of the kernel i
 extern size_t           kernel_OSModuleSize;    // Operating system module size in memory
 extern size_t           kernel_MemorySize;      // Memory size of the machine
 extern kernel_CPUInfo_t kernel_CPUInfo;         // CPU information table
+extern size_t           kernel_UserlandBase;   // Userland base address
+extern size_t           kernel_UserlandLimit;   // Userland limit address
 
 // * Console
 
@@ -137,6 +146,7 @@ void        sleep(uint32_t sec);        // Sleep the system for a certain amount
 // Memory manipulation functions
 
 void*       fill(void* ptr, char chr, size_t len);          // Fill a block of memory with specific value
+void* extfill(void* dst, uint32_t value, uint32_t len);        // Fill a block of memory with specific value (extended value version)
 char*       copy(char* dest, const char* src);              // Copy a block of memory from source to destination
 void*       ncopy(void* dest, const void* src, size_t len); // Copy a block of memory from source to destination with limit
 
@@ -163,7 +173,54 @@ void        puts(const char* str);                      // Print a string to the
 void        nputs(const char* str, int len);            // Print a string to the standard output with limit
 void        printf(const char* fmt, ...);               // Print formatted output to the standard output
 
+// Math functions
+
+// Absolute value functions
+
+static inline int       abs  (int x)       { return x < 0 ? -x : x; }
+static inline long      labs (long x)      { return x < 0 ? -x : x; }
+static inline long long llabs(long long x) { return x < 0 ? -x : x; }
+
+// Min / Max functions
+
+static inline int       min  (int a, int b)             { return a < b ? a : b; }
+static inline long      lmin (long a, long b)           { return a < b ? a : b; }
+static inline long long llmin(long long a, long long b) { return a < b ? a : b; }
+
+static inline int       max  (int a, int b)             { return a > b ? a : b; }
+static inline long      lmax (long a, long b)           { return a > b ? a : b; }
+static inline long long llmax(long long a, long long b) { return a > b ? a : b; }
+
+// Clamp functions 
+
+static inline int       clamp  (int x, int lo, int hi)            { return min  (max  (x, lo), hi); }
+static inline long      lclamp (long x, long lo, long hi)         { return lmin (lmax (x, lo), hi); }
+static inline long long llclamp(long long x, long long lo, long long hi) { return llmin(llmax(x, lo), hi); }
+
+// Sign / Swap functions
+
+static inline int  sign(int x)            { return (x > 0) - (x < 0); }
+static inline void swap(int *a, int *b)   { int t = *a; *a = *b; *b = t; }
+
+// Interpolation functions
+
+static inline int lerp(int a, int b, int t, int s) { return a + (b - a) * t / s; }
+
+// Bit tricks functions
+
+static inline int is_pow2   (int x, int a) { return x > 0 && (x & (x - 1)) == 0; }
+static inline int align_up  (int x, int a) { return (x + a - 1) & ~(a - 1); }
+static inline int align_down(int x, int a) { return x & ~(a - 1); }
+
 // * Memory Management
+
+// Types and structures
+
+// Structure of allocable memory block information
+typedef struct {
+    size_t count;
+    bool allocated;
+} memory_Block_t;
 
 // Constants
 
@@ -279,9 +336,9 @@ void drivers_load(void* dev);       // Loads appropriate driver for target devic
 
 // Functions
 
-int mountmgr_getSlot(void* data);
-int mountmgr_freeSlot(int slot);
-void mountmgr_init();
+int     mountmgr_getSlot(void* data);   // Mount a data field
+int     mountmgr_freeSlot(int slot);    // Release a slot
+void    mountmgr_init();                // Initialize mount manager
 
 // * System Call Management
 
@@ -294,6 +351,13 @@ void mountmgr_init();
 #define SYS_WRITE       0x04                        // Write data to specific file descriptor
 #define SYS_OPEN        0x05                        // Open a file descriptor
 #define SYS_CLOSE       0x06                        // Close a file descriptor
+#define SYS_REMOVE      0x0A                       // Remove a file or empty directory
+#define SYS_MKNOD       0x0E                       // Create a special file (FIFO supported only)
+#define SYS_LSEEK       0x13                       // Move pointer of file descriptor
+#define SYS_MKDIR       0x27                       // Create a directory
+#define SYS_RMDIR       0x28                       // Remove a directory
+#define SYS_MAPMEM      0x5A                       // Map a memory field or file data
+#define SYS_UNMAPMEM    0x5B                       // Unmap a mapped memory
 #define SYS_YIELD       0x9E                        // Switch to next process
 
 // File descriptors
@@ -311,15 +375,60 @@ void mountmgr_init();
 #define O_TRUNC         (1 << 5)                    // Truncate file if exists
 #define O_APPEND        (1 << 6)                    // All writes to file will be appended to end
 
+// Seeking flags
+#define SEEK_SET        1   // Seek from start of file
+#define SEEK_CUR        2   // Seek from current pointer address of file
+#define SEEK_END        3   // Seek from end of file
+
+// Access flags
+#define S_IRUSR         0400    // Owner read
+#define S_IWUSR         0200    // Owner write
+#define S_IXUSR         0100    // Owner execute
+#define S_IRGRP         040     // Group read
+#define S_IWGRP         020     // Group write
+#define S_IXGRP         010     // Group execute
+#define S_IROTH         04      // Others read
+#define S_IWOTH         02      // Others write
+#define S_IXOTH         01      // Others execute
+
+// File type flags
+#define S_IFSOCK        0140000 // Socket
+#define S_IFLNK         0120000 // Link
+#define S_IFREG         0100000 // Regular
+#define S_IFBLK         0060000 // Block device
+#define S_IFDIR         0040000 // Directory
+#define S_IFCHR         0020000 // Character device
+#define S_IFIFO         0010000 // FIFO
+#define S_IFMT          0170000 // File type bit format
+
 // Variables
 
 // Access file forcefully if this flag set (only for kernel components)
 extern bool iocall_ForceAccess;
+
+// Subfunctions
+
+fs_Entry_t* iocall_getFileEntry(int fd);    // Gets file entry via file descriptor
 
 // Functions
 
 void    syscall_init();                             // Initializes system call manager
 size_t  read(int fd, void* buf, size_t count);      // Read data from a specific file descriptor
 size_t  write(int fd, void* buf, size_t count);     // Write data to specific file descriptor
-int     open(char* path, int flags);                // Open a file descriptor
+int     open(const char* path, int flags);                // Open a file descriptor
 int     close(int fd);                              // Close a file descriptor
+int     remove(const char* path);                  // Remove a file or empty directory
+int     lseek(int fd, int off, int whence);         // Move the pointer of file descriptor
+int     mknod(const char* path, int mode);         // Create a special file (only FIFO supported)
+int     mkdir(const char* path, int mode);         // Create a directory
+int     rmdir(const char* path);                   // Remove a directory
+
+// * Userland Manager
+
+#define USERLAND_HEAPSIZE (64 * 1024)
+
+void*   mapmem(size_t size, int fd);    // Maps a memory or file data
+void*   remapmem(void* ptr, size_t size);   // Remaps memory for changing size (only for kernel)
+void    unmapmem(void* ptr);    // Unmaps memory of file data
+size_t  userland_availmem();    // Returns available userland memory
+size_t  userland_init(size_t base, size_t limit); // Inializes userland memory

@@ -7,7 +7,7 @@
 
 bool console_Active = true;
 
-bool console_HardSerial = false;
+bool console_HardSerial = true;
 
 uint16_t* console_Memory = (uint16_t*)0xB8000;
 

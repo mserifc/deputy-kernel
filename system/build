@@ -1,0 +1,5 @@
+#!/bin/bash
+#i686-linux-gnu-gcc-13 -nostdlib -fPIE -pie -o test.elf test.c
+i686-linux-gnu-gcc-13 -nostdlib -fno-builtin -fPIE -pie -o init init.c library.c
+i686-linux-gnu-gcc-13 -nostdlib -fno-builtin -fPIE -pie -o wm wm.c library.c
+i686-linux-gnu-gcc-13 -nostdlib -fno-builtin -fPIE -pie -o wintest wintest.c library.c

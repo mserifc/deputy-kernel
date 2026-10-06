@@ -187,11 +187,11 @@ void i8042_proc() {
         if (port_inb(I8042_INDEXPORT) & I8042_STS_2NDOUTFULL) {
             uint8_t s = port_inb(I8042_DATAPORT);
             uint8_t timeout = 5;
-            while (!(port_inb(I8042_INDEXPORT) & i8042_STS_OUTPUTFULL) && --timeout) { delay(1); }
+            while (!(port_inb(I8042_INDEXPORT) & i8042_STS_OUTPUTFULL) && --timeout) { /*delay(1);*/ }
             if (!(port_inb(I8042_INDEXPORT) & i8042_STS_OUTPUTFULL)) { return; }
             char x = port_inb(I8042_DATAPORT);
             timeout = 5;
-            while (!(port_inb(I8042_INDEXPORT) & i8042_STS_OUTPUTFULL) && --timeout) { delay(1); }
+            while (!(port_inb(I8042_INDEXPORT) & i8042_STS_OUTPUTFULL) && --timeout) { /*delay(1);*/ }
             if (!(port_inb(I8042_INDEXPORT) & i8042_STS_OUTPUTFULL)) { return; }
             char y = port_inb(I8042_DATAPORT);
             // INFO("mouse: 0x%x, %d, %d", s, x, y);
@@ -207,7 +207,7 @@ void i8042_proc() {
             if (((s>>3)&1) && !((s>>6)&3)) { mouse_send(s, x, y); }
         } else {
             bool extflag = false, relflag = false;
-            rescan: delay(1); uint8_t scan = port_inb(I8042_DATAPORT);
+            rescan: /*delay(1);*/ uint8_t scan = port_inb(I8042_DATAPORT);
             if (scan == I8042_KEY_EXTENDED) { extflag = true; goto rescan; }
             if (scan == I8042_KEY_RELEASE) { relflag = true; goto rescan; }
             key_t key = extflag ? i8042_ExtKeyTable[scan] : i8042_KeyTable[scan];

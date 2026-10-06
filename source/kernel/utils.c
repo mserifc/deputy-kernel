@@ -1,9 +1,10 @@
 #include "kernel.h"
 
 #include "hw/port.h"
+#include "hw/simd.h"
 
 // Random access buffer for subfunction results
-char utils_RABuffer[64];
+//char utils_RABuffer[64];
 
 // * Subfunctions
 
@@ -90,6 +91,7 @@ void utils_readRTC(
  * @return String version of integer
  */
 char* utils_itoa(int num) {
+    static char utils_RABuffer[64];
     fill(utils_RABuffer, 0, sizeof(utils_RABuffer));
     int temp = num;
     int digit_count = 0;
@@ -126,6 +128,7 @@ char* utils_itoa(int num) {
  * @return String version of hexadecimal integer
  */
 char* utils_xtoa(uint32_t num) {
+    static char utils_RABuffer[64];
     fill(utils_RABuffer, 0, sizeof(utils_RABuffer));
     int i = 0;
     if (num == 0) {
@@ -253,11 +256,37 @@ void sleep(uint32_t sec) {
  * @return Pointer of start address
  */
 void* fill(void* ptr, char chr, size_t len) {
+    if (simd_SSEActivated) {
+        simd_fill(ptr, chr, len);
+        return ptr;
+    }
     uint8_t* point = ptr;
     for (size_t i = 0; i < len; i++) {
         point[i] = (uint8_t)chr;
     }
     return ptr;
+}
+
+/**
+ * @brief Function for fill a block of memory with specific value (extended value version)
+ * 
+ * @param dst Pointer of start address
+ * @param value Specific 32-bit value to fill
+ * @param len Length to be filled
+ * 
+ * @return Pointer of start address
+ */
+void* extfill(void* dst, uint32_t value, uint32_t len) {
+    if (simd_SSEActivated) {
+        simd_extfill(dst, value, len);
+        return dst;
+    }
+    uint32_t* ptr = (uint32_t*)dst;
+    uint32_t count = len / 4;
+    while (count--) {
+        *ptr++ = value;
+    }
+    return dst;
 }
 
 /**
@@ -289,6 +318,10 @@ char* copy(char* dest, const char* src) {
  * @return Target destination
  */
 void* ncopy(void* dest, const void* src, size_t len) {
+    if (simd_SSEActivated) {
+        simd_copy(dest, src, len);
+        return dest;
+    }
     uint8_t* destination = dest;
     const uint8_t* source = src;
     for (size_t i = 0; i < len; i++) {
@@ -395,6 +428,7 @@ int split(tokens_t* tok, const char* str, char deli) {
  * @return Returns size of writed output
  */
 int snprintf(char* buffer, size_t size, const char* fmt, ...) {
+    if (size == 0) { return 0; }
     va_list args;
     int written = 0;
     va_start(args, fmt);
@@ -485,6 +519,7 @@ int atoi(const char* str) {
  * @return Human-readable format
  */
 char* unit(size_t size) {
+    static char utils_RABuffer[64];
     static const char* units[] = { "B", "KB", "MB", "GB", "TB", "PB" };
     fill(utils_RABuffer, 0, sizeof(utils_RABuffer));
     int index = 0; size_t fmtd = size; while (fmtd >= 1024 && index < 5) { fmtd /= 1024; index++; }

@@ -8,9 +8,11 @@
 #include "hw/acpi.h"
 #include "hw/devbus.h"
 #include "hw/i8042.h"
+#include "hw/simd.h"
 
 #include "fs/tarfs.h"
 
+#include "drv/display.h"
 #include "drv/keyboard.h"
 #include "drv/mouse.h"
 
@@ -27,6 +29,9 @@ size_t kernel_MemorySize;
 
 // CPU information table
 kernel_CPUInfo_t kernel_CPUInfo;
+
+size_t kernel_UserlandBase;
+size_t kernel_UserlandLimit;
 
 void test(void) {
     printf("Merhaba, dunya!\n");
@@ -66,13 +71,41 @@ void test3() {
 // * Functions
 
 // Initialize function of kernel
-void kernel_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
+void core_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
 
     // * Check multiboot magic number
         if (boot_magic != MULTIBOOT_BOOTLOADER_MAGIC) { PANIC("Invalid multiboot magic number"); }
 
     // * Check system memory map
         if (!(boot_info->flags & MULTIBOOT_INFO_MEM_MAP)) { PANIC("Invalid memory map given by bootloader"); }
+
+    // * Check video mode
+        if (!(boot_info->flags & MULTIBOOT_INFO_FRAMEBUFFER_INFO)) {
+            if (!(boot_info->flags & MULTIBOOT_INFO_VBE_INFO)) {
+                extern bool console_Active;
+                console_Active = true;
+            }
+            PANIC("No framebuffer given by bootloader");
+        } else {
+            display_VRAM = (void*)((size_t)boot_info->framebuffer_addr);
+            display_Width = (int)boot_info->framebuffer_width;
+            display_Height = (int)boot_info->framebuffer_height;
+            display_Pitch = (int)boot_info->framebuffer_pitch;
+            display_Depth = (int)boot_info->framebuffer_bpp;
+            if (
+                display_Width <= 320 ||
+                display_Height <= 200 ||
+                //display_Depth != 8 ||
+                //display_Depth != 16 ||
+                //display_Depth != 24 ||
+                display_Depth != 32
+            ) {
+                fill(display_VRAM, 0xFF, display_Width*display_Height*(display_Depth/8));
+                PANIC("Graphic mode not supported");
+            }
+        }
+        
+        /*PANIC("\nAddress: 0x%x\nWidth: %d\nHeight: %d\nPitch: %d\nDepth: %d-bit", (uint32_t)boot_info->framebuffer_addr, boot_info->framebuffer_width, boot_info->framebuffer_height, boot_info->framebuffer_pitch, boot_info->framebuffer_bpp);*/
 
     // * Detect hardware and identify
         // Calculate kernel size
@@ -104,6 +137,7 @@ void kernel_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
             kernel_CPUInfo.has_tsc = (edx >> 8) & 1;    // TSC bit in EDX
             if (!kernel_CPUInfo.has_tsc) { WARN("TSC not supported"); }
             kernel_CPUInfo.has_sse = (edx >> 25) & 1;   // SSE bit in EDX
+            if (!kernel_CPUInfo.has_sse) { WARN("SSE (SIMD) not supported"); }
             kernel_CPUInfo.has_avx = (ecx >> 28) & 1;   // AVX bit in ECX
             kernel_CPUInfo.has_vtx = (ecx >> 5) & 1;    // VMX bit in ECX (Intel VT-x)
             kernel_CPUInfo.has_aes = (ecx >> 25) & 1;   // AES bit in ECX
@@ -127,6 +161,19 @@ void kernel_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
                 kernel_CPUInfo.frequency = tsc2 - tsc1;         // Calculate frequency
                 kernel_CPUInfo.has_tsc |= 2;                    // Set stability bit
             } else if (kernel_CPUInfo.has_tsc) { WARN("TSC not stable"); }
+            if (kernel_CPUInfo.has_sse) {
+                asm volatile (
+                    "mov %%cr0, %%eax\n\t"
+                    "and $~(1 << 2), %%eax\n\t"
+                    "or  $(1 << 1),  %%eax\n\t"
+                    "mov %%eax, %%cr0\n\t"
+                    "mov %%cr4, %%eax\n\t"
+                    "or  $(1 << 9),  %%eax\n\t"
+                    "or  $(1 << 10), %%eax\n\t"
+                    "mov %%eax, %%cr4\n\t"
+                    ::: "%eax"
+                ); simd_SSEActivated = true;
+            }
         }
     
     // * Find the kernel's memory field
@@ -164,9 +211,14 @@ void kernel_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
         } else { WARN("No operating system module found"); }    // Generate panic if no module loaded
 
     // * Initialize kernel components
-        protect_init();                                                         // Initialize Protected Mode
+        //protect_init();                                                         // Initialize Protected Mode
         interrupts_init();                                                      // Initialize Interrupt Manager
-        memory_init(fieldSize - (kernel_PhysicalSize + kernel_OSModuleSize));   // Initialize Memory Manager
+        memory_init(KERNEL_SPACESIZE - (kernel_PhysicalSize + kernel_OSModuleSize));   // Initialize Memory Manager
+        size_t ulbase = userland_init((size_t)&kernel_Base + KERNEL_SPACESIZE, (size_t)&kernel_Base + fieldSize);
+        if (ulbase == (size_t)-1) { PANIC("Userland initialization failed"); }
+        protect_init(ulbase, (size_t)&kernel_Base + fieldSize);
+        kernel_UserlandBase = ulbase;
+        kernel_UserlandLimit = (size_t)&kernel_Base + fieldSize;
         corefs_init();                                                          // Initialize Core File System
         multitask_init();                                                       // Initialize Multitasking
         mountmgr_init();                                                        // Initialize Mount Manager
@@ -176,12 +228,13 @@ void kernel_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
         i8042_init();                                                           // Initialize I8042 PS/2 Controller
     
     // * Print information about kernel and hardware
-    if (false) {
+    if (true) {
         putchar('\n');
-        printf("Kernel size: %s\n", unit(kernel_PhysicalSize));         // Print kernel size
-        printf("Memory size: %s\n", unit(kernel_MemorySize));           // Print physical memory size
-        printf("Field size: %s\n", unit(fieldSize));                    // Print kernel field size
-        printf("Free memory: %s\n", unit(mavail()));                    // Print free memory size
+        printf("Kernel physical size: %s\n", unit(kernel_PhysicalSize));         // Print kernel size
+        printf("Physical memory size: %s\n", unit(kernel_MemorySize));           // Print physical memory size
+        printf("Usable memory field size: %s\n", unit(fieldSize));                    // Print kernel field size
+        printf("Kernel space free memory: %s\n", unit(mavail()));                    // Print free memory size
+        printf("Userland free memory: %s\n", unit(userland_availmem()));
         { date_t current; date(&current);
         printf("Time and date: %d:%d:%d %d/%d/%d\n",                    // Print date and time
             current.hour, current.min, current.sec,                     // Print time
@@ -204,11 +257,11 @@ void kernel_init(multiboot_info_t* boot_info, multiboot_uint32_t boot_magic) {
     // Print kernel boot success message and build version
     printf("Deputy the kernel: build %d, booted successfully.\n", KERNEL_BUILD);
 
-    extern void kernel_main(void); kernel_main();   // Switch to kernel main
+    extern void core_main(void); core_main();   // Switch to kernel main
 }
 
 // Main function of kernel
-void kernel_main(void) {
+void core_main(void) {
     puts("Welcome!\n");     // Print welcome message for user
     putchar('\n');
 
@@ -229,6 +282,50 @@ void kernel_main(void) {
         printf("Available memory: %dKB\n", mavail()/1024);
         puts("---- Memory Test Ended ----\n");
         putchar('\n');
+    }
+    
+    // Userland memory manager test
+    if (false) {
+        INFO("---- mapmem/unmapmem test started ----");
+
+        // Test 1: basic allocation
+        void* p1 = mapmem(1024, -1);
+        if (p1 == NULL) { ERR("Test 1 failed: mapmem returned NULL"); }
+        else { INFO("Test 1 passed: p1 = 0x%x", p1); }
+
+        // Test 2: second allocation
+        void* p2 = mapmem(4096, -1);
+        if (p2 == NULL) { ERR("Test 2 failed: mapmem returned NULL"); }
+        if (p2 == p1) { ERR("Test 2 failed: p2 == p1"); }
+        else { INFO("Test 2 passed: p2 = 0x%x", p2); }
+
+        // Test 3: unmap and alloc again
+        unmapmem(p1);
+        void* p3 = mapmem(1024, -1);
+        if (p3 == NULL) { ERR("Test 3 failed: mapmem returned NULL after unmap"); }
+        if (p3 != p1) { ERR("Test 3 failed: p3 != p1, block not reused"); }
+        else { INFO("Test 3 passed: p3 = 0x%x (reused)", p3); }
+
+        // Test 4: writing memory
+        char* buf = (char*)mapmem(4096, -1);
+        if (buf == NULL) { ERR("Test 4 failed: mapmem returned NULL"); }
+        for (int i = 0; i < 4096; i++) { buf[i] = (char)i; }
+        bool ok = true;
+        for (int i = 0; i < 4096; i++) { if (buf[i] != (char)i) { ok = false; break; } }
+        if (!ok) { ERR("Test 4 failed: memory corruption"); }
+        else { INFO("Test 4 passed: memory write/read ok"); }
+
+        // Test 5: size 0
+        void* p5 = mapmem(0, -1);
+        if (p5 != NULL) { ERR("Test 5 failed: mapmem(0) should return NULL"); }
+        else { INFO("Test 5 passed: mapmem(0) = NULL"); }
+
+        // Test 6: invalid unmap
+        unmapmem(NULL);
+        unmapmem((void*)0x1);
+        INFO("Test 6 passed: invalid unmap did not crash");
+
+        INFO("---- mapmem/unmapmem test ended ----");
     }
 
     // * File system test
@@ -251,7 +348,7 @@ void kernel_main(void) {
         int* entries = fs_readDir("/home/user/");
         if (entries) {
             printf("Entries under /home/user/:\n");
-            for (int i = 0; i < FS_MAX_ENTCOUNT && entries[i] != 0; ++i) {
+            for (int i = 0; i < FS_MAX_ENTCOUNT && entries[i] != FS_DIRENTEND; ++i) {
                 fs_Entry_t* ent = fs_dirent(entries[i]);
                 if (ent) {
                     printf(" - %s (%d)\n", ent->name, ent->type);
@@ -342,52 +439,121 @@ void kernel_main(void) {
     }
 
     // * Initialize device files
-    if (true) { fs_Entry_t* dev; static char zero[MEMORY_BLKSIZE];
+    if (true) { fs_Entry_t* dev;
         if (fs_createDir("/dev/") != FS_STS_SUCCESS) { PANIC("Unable to create directory '/dev/'"); }
         // /dev/keyboard
-        if (fs_writeFile("/dev/keyboard", MEMORY_BLKSIZE, zero) != FS_STS_SUCCESS)
+        if (fs_writeFile("/dev/keyboard", MEMORY_BLKSIZE, NULL) != FS_STS_SUCCESS)
             { PANIC("Unable to create device file '/dev/keyboard'"); }
         dev = fs_stat("/dev/keyboard"); if (!dev)
             { PANIC("Unable to get device file '/dev/keyboard'"); }
         dev->ftype = FS_TYPE_CHARDEV; dev->devperm = O_RDONLY;
         // /dev/mouse
-        if (fs_writeFile("/dev/mouse", MEMORY_BLKSIZE, zero) != FS_STS_SUCCESS)
+        if (fs_writeFile("/dev/mouse", MEMORY_BLKSIZE, NULL) != FS_STS_SUCCESS)
             { PANIC("Unable to create device file '/dev/mouse'"); }
         dev = fs_stat("/dev/mouse"); if (!dev)
             { PANIC("Unable to get device file '/dev/mouse'"); }
         dev->ftype = FS_TYPE_CHARDEV; dev->devperm = O_RDONLY;
+        // /dev/display
+        if (fs_writeFile("/dev/display", MEMORY_BLKSIZE, NULL) != FS_STS_SUCCESS)
+            { PANIC("Unable to create device file '/dev/display'"); }
+        dev = fs_stat("/dev/display"); if (!dev)
+            { PANIC("Unable to get device file '/dev/display'"); }
+        dev->ftype = FS_TYPE_CHARDEV; dev->devperm = O_WRONLY;
+        display_Info_t dinfo;
+        dinfo.width = display_Width;
+        dinfo.height = display_Height;
+        dinfo.pitch = display_Pitch;
+        dinfo.depth = display_Depth;
+        if (fs_writeFile("/dev/display.info", sizeof(dinfo), (char*)&dinfo) != FS_STS_SUCCESS)
+            { PANIC("Unable to create device file '/dev/display.info'"); }
     }
 
+    // * Final routines
     if (true) {
-        extern void kernel_idle(void);
-        if (spawn("kernel_idle", kernel_idle) == -1)
-            { PANIC("Failed to start kernel idle task"); }
-        exec("/system/test.elf");
-        while (true) {
-            i8042_proc();
-            char data;
-            int keyboard = open("/dev/keyboard", O_RDONLY);
-            if (read(keyboard, &data, 1) == 1)
-                { INFO("%s: 0x%x", (data & KEY_RELEASE) ? "Released" : "Pressed", (data & KEY_CODE)); }
-            char data2[3];
-            int mouse = open("/dev/mouse", O_RDONLY);
-            if (read(mouse, data2, 3) == 3) {
-                INFO("Mouse: Stat: 0x%x, Xmox: %d, Ymov: %d", data2[0], data2[1], data2[2]);
-            }
-            yield();
+        /*extern void core_idle(void);
+        if (spawn("core_idle", core_idle) == -1)
+            { PANIC("Failed to start kernel idle task"); }*/
+        
+        /*for (int i = 0; i < display_Width*display_Height; ++i) {
+            uint32_t* vram = (uint32_t*)display_VRAM;
+            vram[i] = 0xFFFFFFFF;
+        }*/
+        
+        /*int fd = open("/dev/display", O_WRONLY);
+        display_Pkg_t* datadata = (display_Pkg_t*)malloc(1000*sizeof(display_Pkg_t));
+        for (int i = 0; i < 1000; ++i) {
+            datadata[i].x = i;
+            datadata[i].y = i;
+            datadata[i].c = 0x00FFFFFF;
         }
+        INFO("%d", write(fd, datadata, 100*sizeof(display_Pkg_t)));*/
+        
+    /*display_Pkg_t pkgs[] = {
+        // DOT — one dot
+        {
+            .op = DISPLAY_OP_DOT,
+            .x0 = 20, .y0 = 10,
+            .c  = 0xFFFFFF00
+        },
+        // LINE — cross line
+        {
+            .op = DISPLAY_OP_LINE,
+            .x0 = 0,   .y0 = 0,
+            .x1 = 100, .y1 = 85,
+            .c  = 0xFF00FFFF
+        },
+        // RECT — rectangle
+        {
+            .op = DISPLAY_OP_RECT,
+            .x0 = 50,  .y0 = 50,
+            .x1 = 150, .y1 = 150,
+            .c  = 0xFF00FF00
+        },
+        // TRI — triangle
+        {
+            .op = DISPLAY_OP_TRI,
+            .x0 = 180, .y0 = 100,
+            .x1 = 150, .y1 = 200,
+            .x2 = 275, .y2 = 185,
+            .c  = 0xFFFF0000
+        },
+    };
+    int dev = open("/dev/display", O_WRONLY);
+    if (dev == -1) { ERR("Unable to open device file '/dev/display'"); }
+    else {
+        int sts = write(dev, pkgs, sizeof(pkgs));
+        if (sts == -1) { ERR("Unable to write device file '/dev/display'"); }
+    }*/
+        
+        int pid = exec("/system/init");
+        //exec("/system/test2.elf");
+        if (pid == -1) {
+            PANIC("Could not start initialize program");
+        }
+        extern void multitask_ulswi(int pid); multitask_ulswi(pid);
     }
 
     PANIC("No processes to execute");   // Switch to idle if no tasks found
 }
 
-void kernel_idle(void) {
-    while (true) {
+void core_worker(void) {
+    /*while (true) {
         if (!(kernel_CPUInfo.has_tsc & 2)) {
             uint64_t tsc1 = utils_rdtsc();
             sleep(1); uint64_t tsc2 = utils_rdtsc();
             kernel_CPUInfo.frequency = tsc2 - tsc1;
         }
         yield();
-    }
+    }*/
+    i8042_proc();
+    display_proc();
+    /*char data;
+    int keyboard = open("/dev/keyboard", O_RDONLY);
+    if (read(keyboard, &data, 1) == 1)
+        { INFO("%s: 0x%x", (data & KEY_RELEASE) ? "Released" : "Pressed", (data & KEY_CODE)); }
+    char data2[3];
+    int mouse = open("/dev/mouse", O_RDONLY);
+    if (read(mouse, data2, 3) == 3) {
+        INFO("Mouse: Stat: 0x%x, Xmox: %d, Ymov: %d", data2[0], data2[1], data2[2]);
+    } close(keyboard); close(mouse);*/
 }

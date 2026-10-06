@@ -3,10 +3,10 @@
 // * Types and structures
 
 // Structure of allocable memory block information
-typedef struct {
+/*typedef struct {
     size_t count;
     bool allocated;
-} memory_Block_t;
+} memory_Block_t;*/
 
 // * Variables and tables
 
@@ -38,6 +38,7 @@ void* malloc(size_t size) {
     bool status = false;
 
     // Find free region
+    if (count > memory_BlockC) { return NULL; }
     for (size_t i = 0; i <= memory_BlockC - count; i++) {
         bool ok = true;
         for (size_t j = 0; j < count; j++) {
@@ -71,7 +72,7 @@ void* malloc(size_t size) {
 void* calloc(size_t nmemb, size_t size) {
     if (!memory_InitLock) { return NULL; }
     size_t n = nmemb * size;
-    if (n > UINT_MAX) { return NULL; }
+    if (nmemb != 0 && n / nmemb != size) { return NULL; }
     void* blk = malloc(n);
     if (blk == NULL) { return NULL; }
     fill(blk, 0, n);
@@ -88,7 +89,10 @@ void* realloc(void* blk, size_t size) {
     ) { return NULL; }
     void* newblk = malloc(size);
     if (newblk == NULL) { return NULL; }
-    ncopy(newblk, blk, size);
+    size_t num = ((size_t)blk - (size_t)memory_Space) / MEMORY_BLKSIZE;
+    size_t oldsize = memory_BlockV[num].count * MEMORY_BLKSIZE;
+    size_t copysize = oldsize < size ? oldsize : size;
+    ncopy(newblk, blk, copysize);
     free(blk);
     return newblk;
 }
@@ -130,7 +134,6 @@ size_t mavail() {
  */
 void memory_init(size_t size) {
     if (memory_InitLock) { return; }
-    memory_InitLock = true;
 
     if (size > UINT_MAX) { PANIC("64-bit addressing not supported"); }
 
@@ -151,4 +154,5 @@ void memory_init(size_t size) {
         memory_BlockV[i].count = 0;
         memory_BlockV[i].allocated = false;
     }
+    memory_InitLock = true;
 }

@@ -16,14 +16,14 @@
     .long 32                    # Preferred pixel depth
 
 .section .text              # Code section
-    .extern kernel_init     # Include kernel initialize function
+    .extern core_init       # Include kernel initialize function
     .global kernel_entry    # Define kernel entry as global symbol
 
 kernel_entry:                   # Entry of kernel
     mov $kernel_Stack, %esp     # Set kernel entry as stack pointer
     push %eax                   # Save EAX register to stack
     push %ebx                   # Save EBX register to stack
-    call kernel_init            # Start the kernel initializer
+    call core_init              # Start the kernel initializer
 
 kernel_halt:            # Halt the system if the initializer fails
     cli                 # Clear interrupt flag (Disable interrupts)

@@ -30,7 +30,10 @@ typedef struct {
 bool protect_InitLock = false;      // Initialize lock for prevent re-initializing protected mode
 
 // Declare an array of GDT Entries.
-protect_GDTEntry_t protect_GDTEntry[3];     // Null, Code, Data
+// Null, Kernel code, Kernel data, Userland code, Userland data
+protect_GDTEntry_t protect_GDTEntry[6];
+// Task State Segment (TSS)
+protect_TSS_t protect_TSS;
 
 // Declare a GDT Pointer to store the base and limit of the GDT
 protect_GDTPointer_t protect_GDTPointer;
@@ -59,29 +62,37 @@ void protect_setGDTEntry (
 // * Functions
 
 // Function for initialize the Global Descriptor Table (GDT)
-void protect_init() {
+void protect_init(size_t base, size_t limit) {
     if (protect_InitLock) { return; }   // Prevent re-initializing
     protect_InitLock = true;            // Lock the initializer
     
     // Set the size of the GDT (total size of all entries minus one)
-    protect_GDTPointer.limit = (sizeof(protect_GDTEntry_t) * 3) - 1;
+    protect_GDTPointer.limit = (sizeof(protect_GDTEntry_t) * 6) - 1;
     // Set the base address of the GDT (the address of gdt_entry array)
     protect_GDTPointer.base = (uint32_t)&protect_GDTEntry;
 
     // Set up the Null Segment (index 0), which is not used in practice
     protect_setGDTEntry(0, 0, 0, 0, 0);
-    // Set up the Code Segment (index 1) with a base address of 0, 4GB size, access flags, and granularity
+    // Set up the Kernel Code Segment (index 1) with a base address of 0, 4GB size, access flags, and granularity
     protect_setGDTEntry(1, 0, 0xFFFFFFFF, 0x9A, 0xCF);
-    // Set up the Data Segment (index 2) with a base address of 0, 4GB size, access flags, and granularity
+    // Set up the Kernel Data Segment (index 2) with a base address of 0, 4GB size, access flags, and granularity
     protect_setGDTEntry(2, 0, 0xFFFFFFFF, 0x92, 0xCF);
-
-    // uint32_t base  = 0x00200000;
-    // uint32_t limit = 0x00800000 - 1;  // 8MB
-
-    // gdt_setEntry(3, base, limit, 0xFA, 0xCF);  // Code, ring 3 (user)
-
-    // gdt_setEntry(4, base, limit, 0xF2, 0xCF);  // Data, ring 3 (user)
+    // Set up the Userland Code Segment (index 3) with dynamic base, dynamic limit, access flags, and granularity
+    protect_setGDTEntry(3, base, limit, 0xFA, 0xCF);
+    // Set up the Userland Data Segment (index 4) with dynamic base, dynamic limit, access flags, and granularity
+    protect_setGDTEntry(4, base, limit, 0xF2, 0xCF);
+    
+    // Setup TSS
+    fill(&protect_TSS, 0, sizeof(protect_TSS_t));
+    protect_TSS.ss0 = 0x10; // Kernel Data Segment (index 2 * 8)
+    uint32_t esp; asm volatile("mov %%esp, %0" : "=r"(esp));   // Get current ESP
+    protect_TSS.esp0 = esp; // Load the current ESP for now
+    
+    // Add TSS entry into GDT
+    protect_setGDTEntry(5, (uint32_t)&protect_TSS, sizeof(protect_TSS_t), 0x89, 0x00);
 
     // Load the GDT into the CPU by passing the address of the GDT Pointer structure
     protect_flush((uint32_t)&protect_GDTPointer);
+    // Load the TSS (Task State Segment)
+    asm volatile("ltr %%ax" : : "a"(0x28));
 }

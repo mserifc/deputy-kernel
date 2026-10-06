@@ -1,9 +1,9 @@
 # Compiler
-CC = i386-elf-gcc
+CC = i686-linux-gnu-gcc-13
 # Assembler
-AS = i386-elf-as
+AS = i686-linux-gnu-as
 # Linker
-LD = i386-elf-ld
+LD = i686-linux-gnu-ld
 
 # Compiler flags
 CC_FLAGS = \
@@ -14,6 +14,7 @@ CC_FLAGS = \
 	-fno-builtin \
 	-fno-exceptions \
 	-fno-leading-underscore \
+	-mgeneral-regs-only -fno-omit-frame-pointer -mno-red-zone \
 	-I include
 # -O2 -g
 # Assembler flags
@@ -36,7 +37,7 @@ LINKER = linker.ld
 # Objects
 OBJECTS = \
 	$(BUILD_DIR)/kernel/entry.o \
-	$(BUILD_DIR)/kernel/kernel.o \
+	$(BUILD_DIR)/kernel/core.o \
 	$(BUILD_DIR)/kernel/console.o \
 	$(BUILD_DIR)/kernel/utils.o \
 	$(BUILD_DIR)/kernel/memory.o \
@@ -45,8 +46,10 @@ OBJECTS = \
 	$(BUILD_DIR)/kernel/multitask.o \
 	$(BUILD_DIR)/kernel/drivers.o \
 	$(BUILD_DIR)/kernel/mountmgr.o \
+	$(BUILD_DIR)/kernel/syscall_hnd.o \
 	$(BUILD_DIR)/kernel/syscall.o \
 	$(BUILD_DIR)/kernel/iocall.o \
+	$(BUILD_DIR)/kernel/userland.o \
 	\
 	$(BUILD_DIR)/hw/port.o \
 	$(BUILD_DIR)/hw/protect_flush.o \
@@ -56,17 +59,20 @@ OBJECTS = \
 	$(BUILD_DIR)/hw/acpi.o \
 	$(BUILD_DIR)/hw/devbus.o \
 	$(BUILD_DIR)/hw/i8042.o \
+	$(BUILD_DIR)/hw/simd.o \
 	\
 	$(BUILD_DIR)/fs/tarfs.o \
 	\
-	$(BUILD_DIR)/drv/usb.o \
+	$(BUILD_DIR)/drv/display.o \
 	$(BUILD_DIR)/drv/keyboard.o \
-	$(BUILD_DIR)/drv/mouse.o
+	$(BUILD_DIR)/drv/mouse.o \
+	\
+	$(BUILD_DIR)/misc/pamtools.o
 
 # Emulator
 EMULATOR = qemu-system-x86_64
 # Emulator flags
-EMULATOR_FLAGS = -machine q35 -cpu n270-v1 -m 512M -device qemu-xhci -rtc base=localtime -monitor stdio
+EMULATOR_FLAGS = -machine q35 -cpu n270-v1 -m 512M -display gtk,gl=off -device virtio-vga -rtc base=localtime -serial stdio
 # For inject machine check exception (also need mce feature in cpu): mce 0 0 0xbc00000100000000 0x0 0x12345678 0x0
 
 # Build the kernel
@@ -92,6 +98,7 @@ $(KERNEL): $(LINKER) $(OBJECTS)
 
 # Build operating system module
 $(MODULE): system
+	#(cd system && ./build)
 	tar --format=ustar -cf $@ $<
 
 # i386-elf-objcopy -I binary -O elf32-i386 test/disk.img build/disk_img.o
@@ -99,6 +106,12 @@ $(MODULE): system
 # Run the kernel with OS module via emulator
 run: $(KERNEL) $(MODULE)
 	$(EMULATOR) $(EMULATOR_FLAGS) -kernel $(KERNEL) -initrd $(MODULE)
+
+iso: $(KERNEL) $(MODULE) iso
+	cp $(KERNEL) iso/boot
+	cp $(MODULE) iso/boot
+	./buildiso
+	$(EMULATOR) $(EMULATOR_FLAGS) -cdrom deputy.iso
 
 # Clean up
 clean:

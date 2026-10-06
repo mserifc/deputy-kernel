@@ -31,12 +31,10 @@ The project shows approximately 32 builds due to internal forking, even though o
 - Basic system calls
 - Own kernel file system
 - USTAR extractor/mounter
-- FAT32 reader (experimental)
 - Userland image loading
 - PS/2 keyboard and mouse driver
 - i8042 driver
 - 24-bit color high resolution display driver (via GRUB, but not used currently)
-- USB XHCI driver (hanged, incomplete)
 - ACPI support
 - PCI/PCIe bus support
 - PIE ELF program loader
@@ -44,8 +42,12 @@ The project shows approximately 32 builds due to internal forking, even though o
 - Basic runtime protection (program inspection)
 - VGA/Serial kernel logging
 - Basic test routines (memory management, file system, multitask, PCI/PCIe bus scan, etc.)
-- Cross-compiler (clang) support and custom makefiles
 - Code comments and historical notes
+- Memory isolation (kernel-userland)
+- Example built-in userland programs (init program, window manager, window manager tester)
+- Built-in graphic tools (drawing, printing string and PAM images)
+- System optimized with SIMD
+- Compiled on android termux
 
 ### Previously added but cancelled
 
@@ -55,12 +57,14 @@ The project shows approximately 32 builds due to internal forking, even though o
 - 320x240x256 and 640x480x16 display drivers (own but potentially dangerous for real hardware, replaced with GRUB video mode)
 - Access control and accounts (hanged to be moved to userland)
 - Built-in shell and text editor (hanged to be moved to userland)
+- FAT32 reader (experimental)
+- USB XHCI driver (hanged, incomplete)
+- Cross-compiler (clang) support and custom makefiles (broken)
 
 ### Not implemented
 
 - SATA/NVMe driver (deemed unnecessary, replaced with USB flash storage)
 - USB flash storage driver (planned, but XHCI driver hanged and project ended)
-- Memory isolation (planned, but project ended)
 
 ## Build & Run
 

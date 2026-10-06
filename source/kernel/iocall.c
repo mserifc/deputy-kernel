@@ -23,13 +23,22 @@ typedef struct {
 // * Variables
 
 // File descriptor table
-iocall_FileDesc_t iocall_FileDesc[IOCALL_MAXFD];
+static iocall_FileDesc_t iocall_FileDesc[IOCALL_MAXFD];
 
 // I/O system calls initialize state
 bool iocall_Initialized = false;
 
 // Access file forcefully if this flag set (only for kernel components)
 bool iocall_ForceAccess = false;
+
+// * Subfunctions
+
+// Function for get file entry via file descriptor
+fs_Entry_t* iocall_getFileEntry(int fd) {
+    if (fd < TYPEFD || fd >= TYPEFD + IOCALL_MAXFD) { return NULL; }
+    int ent = iocall_FileDesc[fd - TYPEFD].entry;
+    if (ent == 0) { return NULL; } return fs_EntryV[ent];
+}
 
 // * Functions
 
@@ -86,14 +95,14 @@ size_t read(int fd, void* buf, size_t count) {
     //     return ptr;
     // } else
     if (fd >= TYPEFD && fd < TYPEFD + IOCALL_MAXFD) {
-        int fdesc = TYPEFD - fd; if (iocall_FileDesc[fdesc].entry == 0) { return -1; }
+        int fdesc = fd - TYPEFD; if (iocall_FileDesc[fdesc].entry == 0) { return -1; }
         if (!iocall_ForceAccess) {
             if (!(iocall_FileDesc[fdesc].flags & O_RDONLY) && !(iocall_FileDesc[fdesc].flags & O_RDWR)) { return -1; }
         }
         if (fs_EntryV[iocall_FileDesc[fdesc].entry] == NULL) { return -1; }
         fs_Entry_t* ent = (fs_Entry_t*)fs_EntryV[iocall_FileDesc[fdesc].entry];
         if (ent->type != FS_TYPE_FILE) { return -1; } char* str = (char*)buf;
-        if (ent->ftype == FS_TYPE_FILE) {
+        if (ent->ftype == FS_TYPE_FILE || ent->ftype == FS_TYPE_MOUNTED) {
             if (iocall_FileDesc[fdesc].ptr >= ent->size) { return 0; }
             char* data = fs_readFile(ent->name); if (data == NULL) { return -1; }
             size_t remain = ent->size - iocall_FileDesc[fdesc].ptr;
@@ -131,12 +140,12 @@ size_t read(int fd, void* buf, size_t count) {
  * @return Number of bytes written (-1 means failure)
  */
 size_t write(int fd, void* buf, size_t count) {
-    // if (fd == STDOUT) {
-    //     char* str = (char*)buf; int c = 0;
-    //     for (int i = 0; i < count; ++i) { putchar(str[i]); ++c; }
-    //     return c;
-    // } else
-    if (fd >= TYPEFD && fd < TYPEFD + IOCALL_MAXFD) {
+    //INFO("%d, 0x%x, %d", fd, buf, count);
+    if (fd == STDOUT) {
+        char* str = (char*)buf; int c = 0;
+        for (size_t i = 0; i < count; ++i) { putchar(str[i]); ++c; }
+        return c;
+    } else if (fd >= TYPEFD && fd < TYPEFD + IOCALL_MAXFD) {
         int fdesc = fd - TYPEFD; if (iocall_FileDesc[fdesc].entry == 0) { return -1; }
         if (!iocall_ForceAccess) {
             if (!(iocall_FileDesc[fdesc].flags & O_WRONLY) && !(iocall_FileDesc[fdesc].flags & O_RDWR)) { return -1; }
@@ -176,10 +185,10 @@ size_t write(int fd, void* buf, size_t count) {
  * 
  * @return File descriptor (-1 means failure)
  */
-int open(char* path, int flags) {
-    if (!iocall_Initialized) { for (int i = 0; i < IOCALL_MAXFD; ++i) {
+int open(const char* path, int flags) {
+    /*if (!iocall_Initialized) { for (int i = 0; i < IOCALL_MAXFD; ++i) {
         iocall_FileDesc[i].entry = 0; iocall_FileDesc[i].flags = 0;
-        iocall_FileDesc[i].ptr = 0; iocall_FileDesc[i].op = false; } }
+        iocall_FileDesc[i].ptr = 0; iocall_FileDesc[i].op = false; } }*/
     bool created = false; int index = fs_index(path); if (index == FS_STS_ENTRYNOTFOUND) {
         if (flags & O_CREAT) {
             if (!iocall_ForceAccess) {
@@ -224,11 +233,118 @@ int open(char* path, int flags) {
  * @return Operation status
  */
 int close(int fd) {
+    int fdesc = fd - TYPEFD;
     if (fd < TYPEFD || fd >= TYPEFD + IOCALL_MAXFD ||
-        iocall_FileDesc[fd].entry == 0 ||
-        iocall_FileDesc[fd].op == true) { return -1; }
-    iocall_FileDesc[fd].entry = 0;
-    iocall_FileDesc[fd].flags = 0;
-    iocall_FileDesc[fd].ptr = 0;
+        iocall_FileDesc[fdesc].entry == 0 ||
+        iocall_FileDesc[fdesc].op == true) { return -1; }
+    iocall_FileDesc[fdesc].entry = 0;
+    iocall_FileDesc[fdesc].flags = 0;
+    iocall_FileDesc[fdesc].ptr = 0;
     return 0;
+}
+
+/**
+ * @brief System call for remove a file or empty directory
+ * 
+ * @param path Path of file or empty directory
+ * 
+ * @return Operation status (-1 mean failure)
+ */
+int remove(const char* path) {
+    int sts = fs_remove(path);
+    if (sts != FS_STS_SUCCESS) {
+        return -1;
+    } return 0;
+}
+
+/**
+ * @brief System call for move the file descriptor pointer
+ * 
+ * @param fd File descriptor
+ * @param off Offset relative from whence
+ * @param whence Position base
+ * 
+ * @return New position of file descriptor pointer (-1 means failure)
+ */
+int lseek(int fd, int off, int whence) {
+    int fdesc = fd - TYPEFD;
+    if (fd < TYPEFD || fd >= TYPEFD + IOCALL_MAXFD ||
+        iocall_FileDesc[fdesc].entry == 0 ||
+        iocall_FileDesc[fdesc].op == true
+    ) { return -1; }
+    fs_Entry_t* ent = (fs_Entry_t*)fs_EntryV[iocall_FileDesc[fdesc].entry];
+    if (ent == NULL ||
+        ent->type != FS_TYPE_FILE ||
+        (
+            ent->ftype != FS_TYPE_FILE &&
+            ent->ftype != FS_TYPE_MOUNTED
+        )
+    ) { return -1; }
+    int ptr; switch (whence) {
+        case SEEK_SET: {
+            ptr = off;
+            break;
+        }
+        case SEEK_CUR: {
+            ptr = iocall_FileDesc[fdesc].ptr + off;
+            break;
+        }
+        case SEEK_END: {
+            ptr = ent->size + off;
+            break;
+        }
+        default: { return -1; }
+    }
+    if (ptr < 0) { return -1; }
+    iocall_FileDesc[fdesc].ptr = ptr;
+    return iocall_FileDesc[fdesc].ptr;
+}
+
+/**
+ * @brief System call for creating a special file (only FIFO supported)
+ * 
+ * @param path Path of special file
+ * @param mode File type and moderation flags
+ * 
+ * @return Operation status (-1 mean failure)
+ */
+int mknod(const char* path, int mode) {
+    if ((mode & S_IFMT) != S_IFIFO) { return -1; }
+    if (fs_stat(path)) { return -1; }
+    if (fs_writeFile(path, MEMORY_BLKSIZE, NULL) != FS_STS_SUCCESS)
+        { return -1; }
+    fs_Entry_t* dev = fs_stat(path);
+    if (!dev) { return -1; }
+    dev->ftype = FS_TYPE_CHARDEV;
+    dev->devperm = O_RDWR;
+}
+
+/**
+ * @brief System call for creating a directory
+ * 
+ * @param path Path of directory
+ * 
+ * @return Operation status (-1 mean failure)
+ */
+int mkdir(const char* path, int mode) {
+    int sts = fs_createDir(path);
+    if (sts != FS_STS_SUCCESS) {
+        return -1;
+    } return 0;
+}
+
+/**
+ * @brief System call for remove a directory
+ * 
+ * @param path Path of directory
+ * 
+ * @return Operation status (-1 mean failure)
+ */
+int rmdir(const char* path) {
+    if (fs_stat(path)->type != FS_TYPE_DIR) {
+        return -1;
+    } int sts = fs_remove(path);
+    if (sts != FS_STS_SUCCESS) {
+        return -1;
+    } return 0;
 }

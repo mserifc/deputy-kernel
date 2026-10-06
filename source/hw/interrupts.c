@@ -131,13 +131,13 @@ NORETURN void interrupts_exceptionHandler(uint8_t num) {
  * @param num Interrupt vector number
  * @param handler Interrupt service handler
  */
-void interrupts_setGate(int num, size_t handler) {
+void interrupts_setGate(int num, size_t hnd, uint16_t sel, uint8_t flags) {
     if (num < 0 || num >= 256 || !interrupts_InitLock) { return; }          // Prevent invalid vectors and uninit
-    size_t addr = handler ? handler : (size_t)interrupts_defaultHandler;    // Set address as default if NULL
+    size_t addr = hnd ? hnd : (size_t)interrupts_defaultHandler;    // Set address as default if NULL
     interrupts_IDTEntry[num].offset_low   = addr & 0xFFFF;                  // Low 16 bits of the handler
-    interrupts_IDTEntry[num].selector     = 0x08;                           // Segment selector
+    interrupts_IDTEntry[num].selector     = sel;                           // Segment selector
     interrupts_IDTEntry[num].zero         = 0x00;                           // Unused
-    interrupts_IDTEntry[num].attributes   = 0x8E;                           // Interrupt gate
+    interrupts_IDTEntry[num].attributes   = flags;                           // Interrupt gate
     interrupts_IDTEntry[num].offset_high  = (addr >> 16) & 0xFFFF;          // High 16 bits of the handler
 }
 
@@ -148,7 +148,7 @@ void interrupts_init() {
     if (interrupts_InitLock) { return; }                                        // Prevent re-initializing
     interrupts_InitLock = true;                                                 // Lock the initializer
     // Set default handler for all interrupt vectors
-    for (int i = 0; i < 256; ++i) { interrupts_setGate(i, (size_t)interrupts_defaultHandler); }
+    for (int i = 0; i < 256; ++i) { interrupts_setGate(i, (size_t)interrupts_defaultHandler, 0x08, 0x8E); }
     interrupts_exceptionInterruptsInit();                                       // Initialize exception handler
     interrupts_IDTPointer.limit = (sizeof(interrupts_IDTEntry_t) * 256) - 1;    // Set the IDT size
     interrupts_IDTPointer.base = (size_t)&interrupts_IDTEntry;                  // Set the IDT base address

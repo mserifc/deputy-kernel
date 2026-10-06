@@ -2,8 +2,6 @@
 
 #include "hw/devbus.h"
 
-#include "drv/usb.h"
-
 // * Types and structures
 
 // Structure of device driver
@@ -21,7 +19,7 @@ typedef struct {
 
 // Driver list
 static drivers_List_t drivers_List[] = {
-    {   // USB Host Driver
+    /*{   // USB Host Driver
         .vendor = -1,
         .device = -1,
         .class = 0x0C,
@@ -29,7 +27,7 @@ static drivers_List_t drivers_List[] = {
         .interface = -1,
         .revision = -1,
         .init = usb_init
-    }
+    }*/
 };
 
 /**
@@ -39,7 +37,9 @@ static drivers_List_t drivers_List[] = {
  */
 void drivers_load(void* dev) {
     devbus_Device_t* info = (devbus_Device_t*)dev;
-    for (size_t i = 0; i < sizeof(drivers_List) / sizeof(drivers_List_t); ++i) {
+    //for (size_t i = 0; i < sizeof(drivers_List) / sizeof(drivers_List_t); ++i) {
+    int driver_count = (int)(sizeof(drivers_List) / sizeof(drivers_List_t));
+    for (int i = 0; i < driver_count; ++i) {
         if (drivers_List[i].vendor != (uint16_t)-1 && info->vendor != drivers_List[i].vendor) { continue; }
         if (drivers_List[i].device != (uint16_t)-1 && info->device != drivers_List[i].device) { continue; }
         if (drivers_List[i].class != (uint8_t)-1 && info->class != drivers_List[i].class) { continue; }

@@ -184,7 +184,7 @@ int fs_createDir(const char* path) {
     for (int i = 0; i < FS_MAX_ENTCOUNT; ++i) {
         if (fs_EntryV[i] == NULL) { index = i; break; }
     } if (index == -1) { return FS_STS_OUTOFMEMORY; }
-    void* newptr = malloc(MEMORY_BLKSIZE);
+    void* newptr = mapmem(MEMORY_BLKSIZE, -1);
     if (newptr == NULL) { return FS_STS_OUTOFMEMORY; }
     fs_EntryV[index] = newptr;
     fs_Entry_t* dir = (fs_Entry_t*)fs_EntryV[index];
@@ -239,7 +239,7 @@ char* fs_readFile(const char* path) {
 int fs_writeFile(const char* path, size_t size, char* buf) {
     if (!fs_InitLock) { return FS_STS_NOTINIT; }
     if (length(path) == 0 || path[length(path) - 1] == '/') { return FS_STS_FAILURE; }
-    if (buf == NULL && size != 0) { return FS_STS_FAILURE; }
+    //if (buf == NULL && size != 0) { return FS_STS_FAILURE; }
     for (int i = 0; i < FS_MAX_ENTCOUNT; ++i) {
         if (fs_EntryV[i] == NULL) { continue; }
         fs_Entry_t* ent = (fs_Entry_t*)fs_EntryV[i];
@@ -256,9 +256,13 @@ int fs_writeFile(const char* path, size_t size, char* buf) {
         fs_Entry_t* ent = (fs_Entry_t*)fs_EntryV[i];
         if (ent->name[0] != '\0' && ent->name[0] != '\0' && compare(ent->name, path) == 0) {
             if (ent->type == FS_TYPE_DIR) { return FS_STS_NOTFILE; }
-            void* newptr = realloc(fs_EntryV[i], size + MEMORY_BLKSIZE);
+            void* newptr = remapmem(fs_EntryV[i], size + MEMORY_BLKSIZE);
             if (newptr == NULL) { return FS_STS_OUTOFMEMORY; } fs_EntryV[i] = newptr;
-            ncopy((char*)fs_EntryV[i] + MEMORY_BLKSIZE, buf, size);
+            if (buf != NULL) {
+                ncopy((char*)fs_EntryV[i] + MEMORY_BLKSIZE, buf, size);
+            } else {
+                fill((char*)fs_EntryV[i] + MEMORY_BLKSIZE, 0, size);
+            }
             ent = (fs_Entry_t*)fs_EntryV[i];
             ent->size = size; date(&ent->mtime); date(&ent->atime);
             return FS_STS_SUCCESS;
@@ -293,7 +297,7 @@ int fs_writeFile(const char* path, size_t size, char* buf) {
     }
     for (int i = 0; i < FS_MAX_ENTCOUNT; ++i) {
         if (fs_EntryV[i] == NULL) {
-            void* newptr = malloc(MEMORY_BLKSIZE + size);
+            void* newptr = mapmem(MEMORY_BLKSIZE + size, -1);
             if (newptr == NULL) { return FS_STS_OUTOFMEMORY; }
             fs_EntryV[i] = newptr;
             fs_Entry_t* ent = (fs_Entry_t*)fs_EntryV[i];
@@ -311,7 +315,11 @@ int fs_writeFile(const char* path, size_t size, char* buf) {
             ent->perm = 0777;
             ent->type = FS_TYPE_FILE;
             ent->ftype = FS_TYPE_FILE;
-            ncopy((char*)fs_EntryV[i] + MEMORY_BLKSIZE, buf, size);
+            if (buf != NULL) {
+                ncopy((char*)fs_EntryV[i] + MEMORY_BLKSIZE, buf, size);
+            } else {
+                fill((char*)fs_EntryV[i] + MEMORY_BLKSIZE, 0, size);
+            }
             return FS_STS_SUCCESS;
         }
     } return FS_STS_OUTOFMEMORY;
@@ -349,7 +357,7 @@ int fs_remove(const char* path) {
                         length(ent2->name) > pathlen
                     ) { return FS_STS_DIRNOTEMPTY; }
                 }
-            } free(fs_EntryV[i]); fs_EntryV[i] = NULL; return FS_STS_SUCCESS;
+            } unmapmem(fs_EntryV[i]); fs_EntryV[i] = NULL; return FS_STS_SUCCESS;
         }
     } return FS_STS_ENTRYNOTFOUND;
 }
@@ -369,7 +377,7 @@ int fs_bulkRemove(const char* path) {
         if (fs_EntryV[i] == NULL) { continue; }
         fs_Entry_t* ent = (fs_Entry_t*)fs_EntryV[i];
         if (ent->name[0] != '\0' && ent->name[0] != '\0' && ncompare(ent->name, path, length(path)) == 0) {
-            free(fs_EntryV[i]); fs_EntryV[i] = NULL;
+            unmapmem(fs_EntryV[i]); fs_EntryV[i] = NULL;
         }
     } return FS_STS_SUCCESS;
 }
@@ -381,13 +389,14 @@ int fs_bulkRemove(const char* path) {
  */
 int corefs_init() {
     if (fs_InitLock) { return FS_STS_FAILURE; }
-    fs_EntryV = (fs_Entry_t**)calloc(FS_MAX_ENTCOUNT, sizeof(fs_Entry_t*));
+    fs_EntryV = (fs_Entry_t**)mapmem(FS_MAX_ENTCOUNT * sizeof(fs_Entry_t*), -1);
+    fill(fs_EntryV, 0, FS_MAX_ENTCOUNT * sizeof(fs_Entry_t*));
     if (fs_EntryV == NULL) { PANIC("Out of memory"); }
-    fs_EntryV[FS_ROOTDIR] = (fs_Entry_t*)malloc(sizeof(fs_Entry_t));
+    fs_EntryV[FS_ROOTDIR] = (fs_Entry_t*)mapmem(sizeof(fs_Entry_t), -1);
     if (fs_EntryV[FS_ROOTDIR] == NULL) { PANIC("Out of memory"); }
-    fs_RADirent = (int*)malloc(FS_MAX_ENTCOUNT * sizeof(int));
+    fs_RADirent = (int*)mapmem(FS_MAX_ENTCOUNT * sizeof(int), -1);
     if (fs_RADirent == NULL) { PANIC("Out of memory"); }
-    fs_RAPath = (char*)malloc(FS_MAX_PATHLEN);
+    fs_RAPath = (char*)mapmem(FS_MAX_PATHLEN, -1);
     if (fs_RAPath == NULL) { PANIC("Out of memory"); }
     fs_Entry_t* rootdir = (fs_Entry_t*)fs_EntryV[FS_ROOTDIR];
     copy(rootdir->name, "/");

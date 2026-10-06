@@ -3,6 +3,7 @@ tmp: .skip 4    # Reserve 4 bytes for restoring stack pointer (ESP)
 
 .section .text
 .global multitask_swi   # Set context switch as global function
+.global multitask_subulswi  # Set userland switch as global function
 multitask_swi:
     pusha   # Push all registers into stack (low to high: EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX. So pushes EAX first.)
     pushf   # Push flags (EFLAGS) register into stack
@@ -69,3 +70,10 @@ multitask_swi:
     popa                # Restore all registers
     mov tmp, %esp       # Restore ESP from memory
     ret                 # Return to next process
+
+multitask_subulswi:
+    addl $4, %esp   # Removes return address in stack
+    # So now the stack contains the interrupt frame on the top
+    mov $0x23, %eax # Load userland data segment into EAX
+    mov %eax, %ds   # Load EAX value into DS (data segment)
+    iret            # Interrupt return
